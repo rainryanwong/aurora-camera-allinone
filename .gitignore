@@ -1,0 +1,9 @@
+/build/
+/release/
+__pycache__/
+*.pyc
+*.jks
+*.keystore
+.env
+.env.*
+/_verification_scripts/

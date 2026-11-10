@@ -1,0 +1,1 @@
+Watermark composition helpers and Legend street UI rendering/layout adapted from Prometheus-Camera Phoenix 1.3.0, revision d5e973bd825a63e4096a16f8b3456e60128a35af, GPL-3.0. Native stock-1770 controllers retained. No Phoenix festival watermark templates included. Corresponding editable sources are delivered externally in CameraCompat_2.0.17_source.zip.
