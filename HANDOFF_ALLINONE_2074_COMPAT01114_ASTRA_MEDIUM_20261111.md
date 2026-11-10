@@ -6,9 +6,9 @@
 
 ## 当前任务与停止点
 
-用户本次要求：重新整理交接文档，随后新开 **GPT-6 Astra Medium** 会话，准备接手后续任务。
+用户最新决定：以 All in One 2.0.74 / Compat 0.1.114 建立 GitHub 开发基线，后续开发统一从下述 Git 仓库继续。接手准备完成后，按用户后续具体任务开展工作。
 
-**当前本地基线为 All in One 2.0.74 / Compat 0.1.114。** 2026-11-11已重新核对完整运行包、完整源码包、独立APK和独立源码包：四份文件的字节数及SHA256均与下表一致；独立源码归档中的586项在工作区均存在且字节一致，当前 `package_module293.py` 也与完整源码归档对应。本次整理仅进行本地读取与文档写入。
+**当前本地基线为 All in One 2.0.74 / Compat 0.1.114。** 2026-11-11已重新核对完整运行包、完整源码包、独立APK和独立源码包：四份文件的字节数及SHA256均与下表一致；独立源码归档中的586项在工作区均存在且字节一致，当前 `package_module293.py` 也与完整源码归档对应。随后已建立私有 GitHub 仓库并发布 v2.0.74 Release；本次更新同步开发入口与下载位置。
 
 ### 最近设备现场（2026-11-10记录）
 
@@ -41,15 +41,21 @@
 
 ## 工作区与当前入口
 
-- Codex项目Cam18：`D:/cam18pm/branches`，projectId `34469847-7c47-44ad-892f-6ed5e1988134`，host=local，非Git。
-- 实际源码根：`D:/cam18pm/branches/lsp_fix_249_import_preview_20261031`，每条shell命令显式指定该workdir。
+- Codex项目Cam18：`D:/cam18pm/branches`，projectId `34469847-7c47-44ad-892f-6ed5e1988134`，host=local。
+- **后续统一开发目录（Git源码根）**：`D:/cam18pm/branches/aurora-camera-allinone`。后续开发命令显式使用此workdir，先查看Git状态并保留已有改动。
+- **私有仓库**：https://github.com/rainryanwong/aurora-camera-allinone ，remote `origin`：`https://github.com/rainryanwong/aurora-camera-allinone.git`，主分支 `main`。
+- **固定基线标签**：`v2.0.74`，对应初始提交 `9de508a2689c0df80be83f55547edde4209daba5`。后续文档与功能改动继续提交到开发分支，保留该基线标签。
+- Git初始导入完整源码归档中的668项文件，逐项字节一致；另加入README、忽略规则和四份交接，共674个文件。
+- **历史工作区与交付材料**：`D:/cam18pm/branches/lsp_fix_249_import_preview_20261031`，保留原始产物、构建日志、快照及历史材料；后续源码修改统一在新Git目录开展。
+- 本文为当前交接入口，Git目录中的版本随开发维护；旧工作区同名文档已同步本次迁移信息。
 - 规则：用户当前AGENTS、`D:/cam18pm/AGENTS.md`。`notes.md`仅保存有复用价值的bug根因与修复。
-- `build_lsp.py`：VERSION=0.1.114 / VERSION_CODE=10214。构建日志 `build301-01114.log`，元数据 `release/CameraCompat-0.1.114.json`。
-- 最终输入快照：`build/lsp-b00523ef215e/input_snapshot`。最终独立源码586项与快照字节对应。
+- `build_lsp.py`：VERSION=0.1.114 / VERSION_CODE=10214。历史构建日志 `build301-01114.log`、元数据 `release/CameraCompat-0.1.114.json` 均位于旧工作区。
+- 最终输入快照（旧工作区）：`build/lsp-b00523ef215e/input_snapshot`。最终独立源码586项与快照字节对应。
 - 当前完整包入口：**`package_module293.py`**，承接2.0.73运行包和完整源码，换入最终0.1.114。完整源码668项，保留旧整合源码81项并加入新打包入口。
 - 旧292入口固定生成2.0.73/0.1.110；更旧278的main固定承接2.0.58。后续不要误用旧入口回退载荷。
 - 继续使用既有签名入口，凭据不打印、不归档。签名证书SHA256：`08e04cdba0d0374cee03318fb4e886fb6b4b4a0365d16ecc5be8fa617721c2dc`。
-- 本交接外置保存；完整包和源码归档沿用已刷入的固定产物。
+- 本交接在Git仓库中维护；完整包和源码归档沿用固定产物，已上传Release。
+- `build/`、`release/`和私有签名材料不进入Git。现有构建工具路径与签名环境变量见README；完整包入口需要2.0.73完整运行包、2.0.73源码包、0.1.114 APK及独立源码包放入新目录的 `release/`，这些输入保留在旧工作区 `release/`。
 
 ### 版本日志的现有事实
 
@@ -57,7 +63,14 @@
 
 ## 当前交付与回退材料
 
-以下路径相对源码根：
+**v2.0.74 Release**：https://github.com/rainryanwong/aurora-camera-allinone/releases/tag/v2.0.74 。已发布，非草稿、非预发布；私有仓库下载需要相应账号权限。
+
+- 完整模块包：[下载](https://github.com/rainryanwong/aurora-camera-allinone/releases/download/v2.0.74/camera68_aurora_allinone_v2.0.74_Stock1770_Compat01114_AUTH.zip)
+- 完整源码包：[下载](https://github.com/rainryanwong/aurora-camera-allinone/releases/download/v2.0.74/CameraCompat_2.0.74_source.zip)
+
+两份附件的GitHub服务端SHA256、大小均已与本地固定交付包核对一致，校验值见下表及Release说明。
+
+以下本地路径相对**旧工作区** `D:/cam18pm/branches/lsp_fix_249_import_preview_20261031`：
 
 | 角色 | 文件 | 字节数 | SHA256 |
 |---|---|---:|---|
@@ -177,4 +190,4 @@
 
 ## 接手第一步
 
-读取当前规则和本文件；只读核对实际源码根及2.0.74/0.1.114交付路径。向用户简短确认已准备就绪，然后等待新任务。读取完成后仅确认准备就绪并等待用户；保留当前实现与停止路线。
+读取当前规则和Git目录中的本文件；以 `D:/cam18pm/branches/aurora-camera-allinone` 为后续开发根目录，核对Git状态、当前分支及2.0.74/0.1.114基线。向用户简短确认已准备就绪，然后等待新任务。读取完成后仅确认准备就绪并等待用户；保留当前实现与停止路线。
