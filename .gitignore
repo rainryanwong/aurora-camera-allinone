@@ -1,5 +1,8 @@
 /build/
 /release/
+/live-motion/build*/
+/live-motion/inputs/
+/live-motion/release/
 __pycache__/
 *.pyc
 *.jks

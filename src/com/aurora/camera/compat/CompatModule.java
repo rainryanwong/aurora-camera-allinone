@@ -1,10 +1,12 @@
 package com.aurora.camera.compat;
 
 import android.os.Build;
+import android.os.ParcelFileDescriptor;
 import android.util.Log;
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.IXposedHookZygoteInit;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import java.io.File;
 import java.io.IOException;
 import java.security.NoSuchAlgorithmException;
 import java.util.List;
@@ -18,6 +20,7 @@ public final class CompatModule implements IXposedHookLoadPackage, IXposedHookZy
 
     private enum State { NEW, RESOLVING, INSTALLING, INSTALLED, FAILED }
     private State state = State.NEW;
+    private static ParcelFileDescriptor moduleArchive;
     private String moduleApkPath;
 
     @Override public void initZygote(StartupParam startupParam) {
@@ -57,11 +60,18 @@ public final class CompatModule implements IXposedHookLoadPackage, IXposedHookZy
             if (moduleApkPath == null) {
                 throw new IllegalStateException("Xposed module APK path is missing");
             }
-            Host host = new Host(lp.classLoader, moduleApkPath);
+            // Delayed resource reads must use the same APK as the hooks in this process.
+            moduleArchive = ParcelFileDescriptor.open(new File(moduleApkPath), ParcelFileDescriptor.MODE_READ_ONLY);
+            Host host = new Host(lp.classLoader, "/proc/self/fd/" + moduleArchive.getFd());
             plans = FeatureRegistry.resolve(host);
         } catch (IOException | NoSuchAlgorithmException | ReflectiveOperationException
                 | RuntimeException | LinkageError failure) {
             state = State.FAILED;
+            if (moduleArchive != null) {
+                try { moduleArchive.close(); }
+                catch (IOException closeFailure) { failure.addSuppressed(closeFailure); }
+                moduleArchive = null;
+            }
             Log.e(TAG, "host/feature resolution failed; no feature hooks installed", failure);
             return;
         }

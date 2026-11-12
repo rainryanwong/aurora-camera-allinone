@@ -18,12 +18,13 @@ public final class ModuleAssets {
             "26e34d5dc8d0b1a3e812543f5d6c596945fc16e69dab551aed42949a62c3d60c";
     private static final String SPLIT_SHA =
             "86a4fa65da35abb22cfe98ce5bde721d4f8e853d20e0c47d680d56dce538b12d";
+    private final String moduleApkPath;
     private final byte[] config;
-    private final byte[] split;
+    private byte[] split;
 
-    private ModuleAssets(byte[] config, byte[] split) {
+    private ModuleAssets(String moduleApkPath, byte[] config) {
+        this.moduleApkPath = moduleApkPath;
         this.config = config;
-        this.split = split;
     }
 
     public static ModuleAssets load(String moduleApkPath) {
@@ -32,18 +33,31 @@ public final class ModuleAssets {
         }
         try (ZipFile module = new ZipFile(moduleApkPath)) {
             byte[] config = read(module, "assets/ambilight/" + CONFIG_NAME);
-            byte[] split = read(module, "assets/ambilight/ambilight.zip");
-            if (!CONFIG_SHA.equals(sha256(config)) || !SPLIT_SHA.equals(sha256(split))) {
+            if (!CONFIG_SHA.equals(sha256(config))) {
                 throw new IllegalStateException("Ambilight module asset identity mismatch");
             }
-            return new ModuleAssets(config, split);
+            return new ModuleAssets(moduleApkPath, config);
         } catch (IOException | NoSuchAlgorithmException failure) {
             throw new IllegalStateException("Cannot load exact Ambilight module assets", failure);
         }
     }
 
     public InputStream config() { return new ByteArrayInputStream(config); }
-    public InputStream split() { return new ByteArrayInputStream(split); }
+
+    public synchronized InputStream split() {
+        if (split == null) {
+            try (ZipFile module = new ZipFile(moduleApkPath)) {
+                byte[] data = read(module, "assets/ambilight/ambilight.zip");
+                if (!SPLIT_SHA.equals(sha256(data))) {
+                    throw new IllegalStateException("Ambilight module asset identity mismatch");
+                }
+                split = data;
+            } catch (IOException | NoSuchAlgorithmException failure) {
+                throw new IllegalStateException("Cannot load exact Ambilight module assets", failure);
+            }
+        }
+        return new ByteArrayInputStream(split);
+    }
 
     private static byte[] read(ZipFile module, String name) throws IOException {
         ZipEntry entry = module.getEntry(name);

@@ -12,7 +12,8 @@ public final class Options229 {
     private final Host host;
     public Options229(Host host){this.host=host;}
     public Context context(){return (Context)XposedHelpers.callStaticMethod(type("com.xiaomi.camera.basic.Global"),"getContext");}
-    public SharedPreferences prefs(){return context().getSharedPreferences("aurora_features229",Context.MODE_PRIVATE);}
+    static final String PREFERENCES = "aurora_features229";
+    public SharedPreferences prefs(){return context().getSharedPreferences(PREFERENCES,Context.MODE_PRIVATE);}
     public boolean enabled(String key){Context c=context();return c!=null&&c.getSharedPreferences("aurora_features229",0).getBoolean(key,false);}
     public Class<?> type(String name){try{return host.type(name);}catch(ClassNotFoundException e){throw new IllegalStateException(e);}}
     public interface Change {boolean set(boolean value)throws Throwable;}

@@ -8,12 +8,10 @@ import java.lang.reflect.Method;
 
 /** Keep the native watermark engine usable inside the editor's LSPosed process. */
 public final class EditorNativeCloud291 {
-    private final String module;
     private final Method query, filter, unwrap;
     private boolean ready;
 
     public EditorNativeCloud291(Host host) throws ReflectiveOperationException {
-        module = host.moduleApkPath;
         // These names are the JNI registration contract, outside R8 symbol aliases.
         Class<?> access = Class.forName("com.miui.mediaeditor.photo.watermark.jni.WatermarkAccessBridge", false, host.loader);
         Class<?> cloud = Class.forName("com.miui.mediaeditor.photo.watermark.jni.CloudWatermarkFilterBridge", false, host.loader);
@@ -22,11 +20,16 @@ public final class EditorNativeCloud291 {
         unwrap = cloud.getDeclaredMethod("nativeUnwrapFiltered", String.class, long.class, String.class);
     }
 
+    public static void loadBridge(String moduleApkPath) {
+        // An editor process can outlive the module APK path replaced by an update.
+        System.load(moduleApkPath + "!/lib/arm64-v8a/libaurora_editor.so");
+        Log.i("AuroraEditor245", "native watermark bridge loaded");
+    }
+
     private static native void restoreEnvironment();
 
     private synchronized void prepare() {
         if (ready) return;
-        System.load(module + "!/lib/arm64-v8a/libaurora_editor.so");
         restoreEnvironment();
         ready = true;
         Log.i("AuroraEditor245", "native watermark environment restored; original filtering retained");

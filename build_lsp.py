@@ -26,8 +26,8 @@ SDK = Path("D:/DevTools/AndroidSdk/platforms/android-37.0/android.jar")
 DEFAULT_KEYSTORE = Path("D:/cam18pm/m3-port/m3-v16-probe-debug.jks")
 PACKAGE = "com.aurora.camera.compat"
 ENTRY = PACKAGE + ".CompatModule"
-VERSION = "0.1.114"
-VERSION_CODE = 10214
+VERSION = "0.1.125"
+VERSION_CODE = 10225
 STOCK_SHA256 = "e25b1ed5581baddd4e1d7f1ae60c1e0f1b1251645df5ba90dfbb9c42953b4a07"
 
 

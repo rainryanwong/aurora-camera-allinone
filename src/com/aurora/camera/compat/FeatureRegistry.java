@@ -39,6 +39,9 @@ public final class FeatureRegistry {
         plans.add(NightPaletteRenderHooks.resolve(host));
         plans.add(GripAndMenuHooks.resolve(host));
         plans.add(Settings211Hooks.resolve(host));
+        plans.add(ViewfinderDebugHooks.resolve(host));
+        plans.add(CameraCloudControls.resolve(host));
+        plans.add(new OisReinitHooks(host));
         plans.add(Hdr211Hooks.resolve(host));
         plans.add(HdrPresentation214Hooks.resolve(host));
         plans.add(Sound211Hooks.resolve(host));

@@ -3,6 +3,7 @@ package com.aurora.camera.compat.ui;
 import android.content.Context;
 import android.util.Log;
 import com.aurora.camera.compat.Host;
+import com.aurora.camera.compat.ViewfinderDebugHooks;
 import de.robv.android.xposed.XposedHelpers;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
@@ -96,6 +97,9 @@ public final class NativePreferences240 {
     }
     public void regroupLaboratoryTools(Object fragment){
         Object root=XposedHelpers.getObjectField(fragment,"mPreferenceGroup");
+        Object stock=call(root,"k0","category_advance_setting");
+        move(root,stock,ViewfinderDebugHooks.PARAMETERS,-2);
+        move(root,stock,ViewfinderDebugHooks.LAYOUT,-1);
         Object ai=category(fragment,root,"category_aurora_ai", "AI选项优化",-1998);
         Object backup=category(fragment,root,"category_aurora_backup",null,-1997);
         move(root,ai,"pref_aurora_ai_debug_controls",0);

@@ -1,9 +1,12 @@
 package com.aurora.camera.compat;
 
 import android.os.Build;
+import android.os.ParcelFileDescriptor;
 import android.util.Log;
 import com.aurora.camera.compat.editor.Editor245Policy;
 import com.aurora.camera.compat.editor.EditorFeatureDevices293;
+import com.aurora.camera.compat.editor.EditorLegendaryGallery;
+import com.aurora.camera.compat.editor.EditorNativeCloud291;
 import com.aurora.camera.compat.editor.abi250.EditorAbi250;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 import java.io.File;
@@ -14,6 +17,7 @@ public final class Editor245Entry {
     private static final String TAG = "AuroraEditor245";
     private enum State { NEW, RESOLVING, INSTALLING, INSTALLED, FAILED }
     private static State state = State.NEW;
+    private static ParcelFileDescriptor moduleArchive;
     private Editor245Entry() {}
 
     public static synchronized void handleLoadPackage(XC_LoadPackage.LoadPackageParam lp, String moduleApkPath) {
@@ -35,15 +39,21 @@ public final class Editor245Entry {
             if (moduleApkPath == null || moduleApkPath.isEmpty()) {
                 throw new IllegalStateException("Xposed module APK path is missing");
             }
+            // Keep the original inode readable by delayed editor asset lookups after an APK update.
+            moduleArchive = ParcelFileDescriptor.open(new File(moduleApkPath), ParcelFileDescriptor.MODE_READ_ONLY);
             long started=android.os.SystemClock.elapsedRealtime();
             EditorAbi250 symbols = EditorAbi250.resolveCached(lp.appInfo.sourceDir, moduleApkPath,
                     new File(lp.appInfo.dataDir,"code_cache"),lp.classLoader);
             if(symbols.cacheIssue!=null)Log.e(TAG,symbols.cacheIssue);
-            Host editor = new Host(lp.classLoader, moduleApkPath, symbols);
+            if (symbols.usesNativeCloudFilter()) EditorNativeCloud291.loadBridge(moduleApkPath);
+            Host editor = new Host(lp.classLoader, "/proc/self/fd/" + moduleArchive.getFd(), symbols);
             EditorFeatureDevices293 features = symbols.usesNativeCloudFilter() ? new EditorFeatureDevices293(editor) : null;
             Editor245Hooks hooks = new Editor245Hooks(editor);
             EditorMore246Hooks more = new EditorMore246Hooks(editor);
             state = State.INSTALLING;
+            if (symbols.usesNativeCloudFilter() && Editor245Policy.PACKAGE.equals(lp.processName)) {
+                EditorLegendaryGallery.install(lp.classLoader);
+            }
             if(features!=null)features.install();
             hooks.install();
             more.install();
@@ -57,6 +67,11 @@ public final class Editor245Entry {
                 | RuntimeException | LinkageError failure) {
             State previous = state;
             state = State.FAILED;
+            if (previous == State.RESOLVING && moduleArchive != null) {
+                try { moduleArchive.close(); }
+                catch (IOException closeFailure) { failure.addSuppressed(closeFailure); }
+                moduleArchive = null;
+            }
             Log.e(TAG, "editor hooks failed at " + previous + "; "
                     + (previous == State.INSTALLING ? "partial editor hooks may remain; " : "no editor hooks installed; ")
                     + "no retry in this process", failure);

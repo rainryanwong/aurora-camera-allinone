@@ -42,7 +42,8 @@ class LookupModel:
     This is a host-side selection model, not execution of Qualcomm's parser.
     Root data content and native object deserialization remain runtime gates.
     """
-    def __init__(self, modes, records):
+    def __init__(self, modes, records, *, reuse_source_sid=False):
+        self.reuse_source_sid = reuse_source_sid
         self.canon, self.parent, self.packed = mode_graph(modes)
         self.children = {}
         self.links = {}
@@ -116,7 +117,8 @@ class LookupModel:
             if at != target:
                 continue
             sid = len(output)+1
-            clone = (sid, source[1], new_id, source[3], source[4], sid)
+            source_sid = source[5] if self.reuse_source_sid else sid
+            clone = (sid, source[1], new_id, source[3], source[4], source_sid)
             output.append(clone)
             self.modules[(new_id, name)] = clone
             self.stock_clone_sids.add(sid)

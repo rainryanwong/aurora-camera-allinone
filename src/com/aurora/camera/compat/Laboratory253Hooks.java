@@ -64,6 +64,8 @@ public final class Laboratory253Hooks {
     public void install(){
         XposedBridge.hookMethod(lab,new StrictHook(2000){@Override protected void after(MethodHookParam p){
             if(p.hasThrowable())return;Object f=p.thisObject;
+            options.addSwitch(f,ViewfinderDebugHooks.PARAMETERS,"取景参数调试","在取景器显示对焦、白平衡、ISO、快门及 HDR 和夜景状态。重新打开相机后生效",null,null);
+            options.addSwitch(f,ViewfinderDebugHooks.LAYOUT,"界面布局调试面板","在取景器显示调试按钮，点击后查看各区域边框。重新打开相机后生效",null,null);
             options.addAction(f,CUSTOM,"自定义滤镜管理","搜索、去重和批量删除自建配方与导入滤镜",()->open(f,"filters"));
             options.addAction(f,BACKUP,"备份与恢复","备份相机设置、菜单与模式布局及模块选项",()->open(f,"backup"));
             options.addSwitch(f,FilterStrength270.KEY,"滤镜强度调节","打开照片滤镜面板时显示强度操作条",null,null);
@@ -72,9 +74,13 @@ public final class Laboratory253Hooks {
             SuperTelephotoHooks.mergeLensOptions(options.prefs());
             options.addSwitch(f,SuperTelephotoHooks.EXTENDED,"AI超级长焦扩展镜头支持","将AI超级长焦算法进一步放开至主摄及3.2x镜头可用，经实测，多数场景下增强后效果不及原图直出，请根据实际情况选择启用，而非盲目开启。",null,null);
             preferences.regroupLaboratoryTools(f);
+            options.addAction(f,CameraCloudControls.ENTRY,CameraCloudControls.TITLE,
+                    "自定义开启相机下发云控能力",BACKUP,()->open(f,CameraCloudControls.PAGE));
+            options.addSwitch(f,OisReinitHooks.KEY,"相机防抖异常修复（实验性）",
+                    "尝试修复部分场景下，OIS光学防抖异常运行的问题。",CameraCloudControls.ENTRY,null);
         }});
         XposedBridge.hookMethod(populate,new StrictHook(){@Override protected void before(MethodHookParam p){
-            String kind=kind(p.thisObject);if(kind==null)return;Page page=page(p.thisObject,kind);page.render();if(!kind.equals("backup"))main.post(page::load);p.setResult(null);
+            String kind=kind(p.thisObject);if(kind==null)return;Page page=page(p.thisObject,kind);page.render();if(!kind.equals("backup")&&!kind.equals(CameraCloudControls.PAGE))main.post(page::load);p.setResult(null);
         }});
         XposedBridge.hookMethod(register,new StrictHook(){@Override protected void before(MethodHookParam p){if(kind(p.thisObject)!=null)p.setResult(null);}});
         XposedBridge.hookMethod(update,new StrictHook(){@Override protected void before(MethodHookParam p){if(kind(p.thisObject)!=null)p.setResult(null);}});
@@ -161,7 +167,7 @@ public final class Laboratory253Hooks {
                 saved.putBoolean("import_launch_consumed",true);main.post(()->{if(attached())choose(IMPORT);});
             }
         }
-        void title(){com.aurora.camera.compat.ui.NativePageTitle257.set(activity(fragment),kind.equals("backup")?"备份与恢复":kind.equals("import")?"选择待导入滤镜":kind.equals("duplicates")?"重复滤镜":"自定义滤镜管理");}
+        void title(){com.aurora.camera.compat.ui.NativePageTitle257.set(activity(fragment),kind.equals(CameraCloudControls.PAGE)?CameraCloudControls.TITLE:kind.equals("backup")?"备份与恢复":kind.equals("import")?"选择待导入滤镜":kind.equals("duplicates")?"重复滤镜":"自定义滤镜管理");}
         void save(){Bundle state=state(fragment);state.putString("query",query);state.putBoolean("selecting",selecting);state.putStringArrayList("selected",new ArrayList<>(selected));ArrayList<String> groupIds=new ArrayList<>();for(List<String> group:groups)groupIds.add(String.join("\n",group));state.putStringArrayList("groups",groupIds);}
         Object category(Object root,String key,String title,int order){return preferences.category(fragment,root,key,title,order);}
         Object row(Object group,String key,String title,String summary,Runnable action){
@@ -171,6 +177,15 @@ public final class Laboratory253Hooks {
         }
         void render(){
             if(!attached())return;Object root=XposedHelpers.getObjectField(fragment,"mPreferenceGroup");call(root,"m0");resultGroups.clear();title();
+            if(kind.equals(CameraCloudControls.PAGE)){
+                for(CameraCloudControls.Control control:CameraCloudControls.Control.values()){
+                    options.addSwitch(fragment,control.key,"停用"+control.title,"开启后停止接收，关闭时接受云控",null,null);
+                }
+                Object reset=category(root,"camera_cloud_reset_group",null,Integer.MAX_VALUE);
+                String failure=CameraCloudControls.resetError(options.prefs());
+                row(reset,"camera_cloud_reset","清除已有云控配置",failure==null?"重新打开相机后恢复 ROM 本地配置":"上次清除未完成："+failure,this::confirmCloudReset);
+                return;
+            }
             if(kind.equals("backup")){
                 Object group=category(root,"backup_actions","相机与模块设置",0);
                 row(group,"settings_backup_create","创建备份","保存设置、顶部与下拉菜单布局、模式排序、模块选项及设置引用的滤镜资源",()->choose(WRITE));
@@ -186,6 +201,17 @@ public final class Laboratory253Hooks {
             cancelSelection=row(tools,"custom_cancel_selection","退出选择","",()->{selecting=false;selected.clear();save();refreshRows();});
             call(deleteAction,"f0",selecting);call(cancelSelection,"f0",selecting);
             addSearch(root);renderRows(root);
+        }
+        void confirmCloudReset(){
+            dialogs.builder(activity(fragment)).setTitle("清除已有云控配置")
+                    .setMessage("清除这五类已接收的配置并关闭相机。重新打开相机后将读取 ROM 本地配置，仍接受云控的项目可以再次更新。")
+                    .setNegativeButton("取消",null).setPositiveButton("清除并关闭相机",(dialog,which)->{
+                        if(!CameraCloudControls.queueReset(options.prefs())){
+                            message("操作未完成","无法保存清除请求");
+                            return;
+                        }
+                        CameraSettingsBackup253.finishForReload(activity(fragment));
+                    }).show();
         }
         Object resultGroup(Object root,String key,String title,int order){Object group=category(root,key,title,order);resultGroups.add(group);return group;}
         void renderRows(Object root){

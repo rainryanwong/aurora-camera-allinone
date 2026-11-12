@@ -3,6 +3,7 @@ package com.aurora.camera.features.watermark;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.util.Log;
+import android.util.LruCache;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Locale;
@@ -15,7 +16,16 @@ import de.robv.android.xposed.*;
 /** Exact v16 mapping of Phoenix watermark consumers, not a global device spoof. */
 final class RenderingHooks {
     private static final String TAG="AuroraPhoenixWm";
-    private static final ThreadLocal<String> activeRender=new ThreadLocal<>();
+    private static final ThreadLocal<Render> activeRender=new ThreadLocal<>();
+    private static final class Render {
+        final String name;
+        final Object owner;
+        boolean composed;
+        Render(String name,Object owner){this.name=name;this.owner=owner;}
+    }
+    private static final LruCache<String,Bitmap> brandAssets=new LruCache<String,Bitmap>(8*1024*1024) {
+        @Override protected int sizeOf(String key,Bitmap value){return value.getAllocationByteCount();}
+    };
     private static final Map<Object,ReentrantLock> rendererLocks=Collections.synchronizedMap(new WeakHashMap<>());
     private static ReentrantLock rendererLock(Object owner){synchronized(rendererLocks){ReentrantLock lock=rendererLocks.get(owner);if(lock==null){lock=new ReentrantLock();rendererLocks.put(owner,lock);}return lock;}}
     private static Context context(ClassLoader loader) throws Exception {
@@ -94,13 +104,11 @@ final class RenderingHooks {
                             Object node=p.args[4];
                             String id=viewNode.isInstance(node)?String.valueOf(nodeId.invoke(node)):"";
                             if("model".equalsIgnoreCase(id)||"model_versionName".equalsIgnoreCase(id)) {
-                                Bitmap source=(Bitmap)asset.invoke(null,p.args[0],"cloud_watermark_material/17_ultra_by_leica/xiaomi_black.webp");
-                                if(source==null||source.isRecycled())throw new IllegalStateException("Dynamic model dependency missing");
-                                Bitmap replacement=(Bitmap)compose.invoke(null,p.args[0],source,n.substring(0,n.length()-9).trim(),"xiaomi_black.webp");
-                                if(replacement==null||replacement.isRecycled())throw new IllegalStateException("Dynamic model composition unavailable");
-                                // The composed brand bitmap carries this text; suppress only its duplicate node.
-                                if(replacement!=source)replacement.recycle();
-                                p.setResult(null);return;
+                                Render current=activeRender.get();
+                                // The preceding logo node already carries this model text.
+                                if(current!=null&&current.owner==p.thisObject&&current.name.equals(n)&&current.composed) {
+                                    p.setResult(null);return;
+                                }
                             }
                         }
                         // 6.8 J0 stores this field in lower case; its value forms a case-sensitive asset path.
@@ -108,22 +116,38 @@ final class RenderingHooks {
                         p.setObjectExtra("aurora.model",rendererModel.get(p.thisObject));
                         p.setObjectExtra("aurora.previousRender",activeRender.get());
                         rendererModel.set(p.thisObject,canonical);
-                        p.setObjectExtra("aurora.applied",Boolean.TRUE);activeRender.set(n);
+                        Render current=activeRender.get();
+                        p.setObjectExtra("aurora.applied",Boolean.TRUE);
+                        activeRender.set(current!=null&&current.owner==p.thisObject&&current.name.equals(n)?current:new Render(n,p.thisObject));
                     } catch(Throwable err) {Log.e(TAG,"BITMAP_GATE_FAILED; OEM retained",err);}
                 }
                 protected void afterHookedMethod(MethodHookParam p) throws Throwable {
                     try {
                         if(!Boolean.TRUE.equals(p.getObjectExtra("aurora.applied")))return;
                         try {rendererModel.set(p.thisObject,p.getObjectExtra("aurora.model"));}
-                        finally {String previous=(String)p.getObjectExtra("aurora.previousRender");if(previous==null)activeRender.remove();else activeRender.set(previous);}
+                        finally {Render previous=(Render)p.getObjectExtra("aurora.previousRender");if(previous==null)activeRender.remove();else activeRender.set(previous);}
                     } finally {ReentrantLock lock=(ReentrantLock)p.getObjectExtra("217.renderer.lock");if(lock!=null)lock.unlock();}
                 }
             };
             XposedBridge.hookMethod(e,gate);XposedBridge.hookMethod(f,gate);
             XposedBridge.hookMethod(asset,new XC_MethodHook() {
+                protected void beforeHookedMethod(MethodHookParam p) {
+                    Render current=activeRender.get();
+                    if(current==null||!leica(current.name))return;
+                    String path=(String)p.args[1];
+                    if(!path.startsWith("cloud_watermark_material/17_ultra_by_leica/"))return;
+                    Bitmap cached=brandAssets.get(current.name+"\n"+path);
+                    if(cached==null)return;
+                    // OEM render nodes own their bitmap and may modify or recycle it.
+                    p.setResult(cached.copy(Bitmap.Config.ARGB_8888,false));
+                    p.setObjectExtra("217.brand.cached",Boolean.TRUE);
+                    current.composed=true;
+                }
                 protected void afterHookedMethod(MethodHookParam p) {
-                    String n=activeRender.get();
-                    if(n==null || !leica(n) || p.hasThrowable() || !(p.getResult() instanceof Bitmap))return;
+                    if(Boolean.TRUE.equals(p.getObjectExtra("217.brand.cached")))return;
+                    Render current=activeRender.get();
+                    if(current==null || !leica(current.name) || p.hasThrowable() || !(p.getResult() instanceof Bitmap))return;
+                    String n=current.name;
                     String path=String.valueOf(p.args[1]);
                     if(!path.startsWith("cloud_watermark_material/17_ultra_by_leica/"))return;
                     try {
@@ -131,9 +155,11 @@ final class RenderingHooks {
                         String base=n.substring(0,n.length()-9).trim();
                         Bitmap result=(Bitmap)compose.invoke(null,p.args[0],source,base,path.substring(path.lastIndexOf('/')+1));
                         if(result==null || result.isRecycled())throw new IllegalStateException("invalid rendered asset");
-                        p.setResult(result);
-                        // Native loader owns its original bitmap; do not recycle shared buffers.
-
+                        brandAssets.put(n+"\n"+path,result);
+                        p.setResult(result.copy(Bitmap.Config.ARGB_8888,false));
+                        current.composed=true;
+                        // xs.a.a decoded this source for this call; its replacement is now owned by OEM.
+                        if(source!=result)source.recycle();
                     } catch(Throwable err) {Log.e(TAG,"DYNAMIC_COMPOSE_FAILED; native bitmap retained",err);}
                 }
             });
