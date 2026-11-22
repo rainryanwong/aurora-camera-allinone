@@ -1,12 +1,14 @@
 package com.aurora.camera.livemotion;
 
+import com.aurora.camera.diagnostics.ObservedHook;
+
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.app.Application;
 import android.content.Context;
 import android.content.pm.PackageInfo;
 import android.util.Log;
 import de.robv.android.xposed.IXposedHookLoadPackage;
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -23,17 +25,26 @@ public final class LiveMotionModule implements IXposedHookLoadPackage {
 
     @Override public void handleLoadPackage(final XC_LoadPackage.LoadPackageParam lp) throws Throwable {
         if (!PKG.equals(lp.packageName) || !PKG.equals(lp.processName)) return;
+        if (lp.appInfo != null && lp.appInfo.dataDir != null) {
+            HookDiagnostics.start(lp.appInfo.dataDir, "live-motion", BuildInfo.VERSION);
+        }
+        HookDiagnostics.install("LiveMotionAttach", () -> attach(lp));
+    }
+
+    private static void attach(XC_LoadPackage.LoadPackageParam lp) throws NoSuchMethodException {
         Method attach = Application.class.getDeclaredMethod("attach", Context.class);
-        XposedBridge.hookMethod(attach, new XC_MethodHook() {
-            @Override protected void afterHookedMethod(MethodHookParam p) throws Throwable {
+        HookDiagnostics.hookMethod(attach, new ObservedHook() {
+            @Override protected void runAfter(MethodHookParam p) throws Throwable {
                 if (p.hasThrowable()) return;
                 Context context = (Context) p.args[0];
                 PackageInfo info = context.getPackageManager().getPackageInfo(PKG, 0);
                 if (info.getLongVersionCode() != 680017700L) {
+                    HookDiagnostics.resolving("LiveMotionModule");
+                    HookDiagnostics.resolutionFailed(new IllegalStateException("Unsupported camera version " + info.getLongVersionCode()));
                     log("unsupported camera version=" + info.getLongVersionCode());
                     return;
                 }
-                install(lp.classLoader, context);
+                HookDiagnostics.install("LiveMotionModule", () -> install(lp.classLoader, context));
             }
         });
     }
@@ -68,21 +79,21 @@ public final class LiveMotionModule implements IXposedHookLoadPackage {
         final MasterAntibanding antibanding = new MasterAntibanding(cl, context, master, type);
 
         // Resolve the entire required contract before installing feature hooks.
-        XposedBridge.hookMethod(support, new XC_MethodHook() {
-            @Override protected void beforeHookedMethod(MethodHookParam p) {
+        HookDiagnostics.hookMethod(support, new ObservedHook() {
+            @Override protected void runBefore(MethodHookParam p) {
                 if (p.thisObject == device) p.setResult(true);
             }
         });
-        XposedBridge.hookMethod(config, new XC_MethodHook() {
-            @Override protected void beforeHookedMethod(MethodHookParam p) {
+        HookDiagnostics.hookMethod(config, new ObservedHook() {
+            @Override protected void runBefore(MethodHookParam p) {
                 if (p.thisObject == device) p.setResult(profile);
             }
         });
-        XposedBridge.hookMethod(entrySupport, new XC_MethodHook() {
-            @Override protected void beforeHookedMethod(MethodHookParam p) { p.setResult(true); }
+        HookDiagnostics.hookMethod(entrySupport, new ObservedHook() {
+            @Override protected void runBefore(MethodHookParam p) { p.setResult(true); }
         });
-        XposedBridge.hookMethod(active, new XC_MethodHook() {
-            @Override protected void afterHookedMethod(MethodHookParam p) throws Throwable {
+        HookDiagnostics.hookMethod(active, new ObservedHook() {
+            @Override protected void runAfter(MethodHookParam p) throws Throwable {
                 if (!p.hasThrowable()) {
                     completionBridge.activate(p.thisObject);
                     targetZoom.activate(p.thisObject);
@@ -91,35 +102,35 @@ public final class LiveMotionModule implements IXposedHookLoadPackage {
                         + " error=" + p.hasThrowable());
             }
         });
-        XposedBridge.hookMethod(inactive, new XC_MethodHook() {
-            @Override protected void beforeHookedMethod(MethodHookParam p) {
+        HookDiagnostics.hookMethod(inactive, new ObservedHook() {
+            @Override protected void runBefore(MethodHookParam p) {
                 completionBridge.deactivate(p.thisObject);
                 targetZoom.deactivate(p.thisObject);
             }
-            @Override protected void afterHookedMethod(MethodHookParam p) {
+            @Override protected void runAfter(MethodHookParam p) {
                 log("inactive error=" + p.hasThrowable());
             }
         });
-        XposedBridge.hookMethod(auto, new XC_MethodHook() {
-            @Override protected void beforeHookedMethod(MethodHookParam p) {
+        HookDiagnostics.hookMethod(auto, new ObservedHook() {
+            @Override protected void runBefore(MethodHookParam p) {
                 log("zoom " + Arrays.toString(p.args));
             }
         });
-        XC_MethodHook completion = new XC_MethodHook() {
-            @Override protected void afterHookedMethod(MethodHookParam p) throws Throwable {
+        ObservedHook completion = new ObservedHook() {
+            @Override protected void runAfter(MethodHookParam p) throws Throwable {
                 log("completion images=" + images.getBoolean(p.thisObject)
                         + " zoom=" + zoom.getBoolean(p.thisObject)
                         + " capture=" + capture.getInt(p.thisObject)
                         + " error=" + p.hasThrowable());
             }
         };
-        XposedBridge.hookMethod(reset, completion);
-        XposedBridge.hookMethod(finished, completion);
+        HookDiagnostics.hookMethod(reset, completion);
+        HookDiagnostics.hookMethod(finished, completion);
         completionBridge.install();
         videoWindow.install();
         targetZoom.install();
         antibanding.install();
-        log("installed v0.5.1 camera=680017700 device=" + device.getClass().getName()
+        log("installed v" + BuildInfo.VERSION + " camera=680017700 device=" + device.getClass().getName()
                 + " types=" + profile.keySet() + " lenses=wide,tele,Standalone");
     }
 

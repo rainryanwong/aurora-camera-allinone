@@ -1,5 +1,7 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.Context;
 import android.content.DialogInterface;
 import android.graphics.Bitmap;
@@ -151,8 +153,8 @@ public final class Editor245Hooks {
             }
         };
         // l(boolean) is synchronous and covers c(), file publication and native manager parsing.
-        XposedBridge.hookMethod(initializeManager, initializationGuard);
-        XposedBridge.hookMethod(initializeAssets, new StrictHook() {
+        HookDiagnostics.hookMethod(initializeManager, initializationGuard);
+        HookDiagnostics.hookMethod(initializeAssets, new StrictHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 if (assetOwner.get() == null) {
                     Editor245Assets.Guard guard = templates.begin();
@@ -166,7 +168,7 @@ public final class Editor245Hooks {
                 finally { if (guard != null) { assetOwner.remove(); guard.close(); } }
             }
         });
-        XposedBridge.hookMethod(catalog, new StrictHook() {
+        HookDiagnostics.hookMethod(catalog, new StrictHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 Integer previous = catalogDepth.get();
                 p.setObjectExtra(PREVIOUS, previous);
@@ -188,13 +190,13 @@ public final class Editor245Hooks {
                 }
             }
         });
-        XposedBridge.hookMethod(capability, new StrictHook() {
+        HookDiagnostics.hookMethod(capability, new StrictHook() {
             @Override protected void before(MethodHookParam p) {
                 Integer depth = catalogDepth.get();
                 if (depth != null && depth > 0 && (!nativeCloud || ((Integer)p.args[0]) == 8)) p.setResult(true);
             }
         });
-        XposedBridge.hookMethod(eligibility, new StrictHook() {
+        HookDiagnostics.hookMethod(eligibility, new StrictHook() {
             @Override protected void after(MethodHookParam p) throws Throwable {
                 if (p.hasThrowable() || !failedEligibility.isInstance(p.getResult())) return;
                 if (Editor245Policy.leicaEligibility((String) p.args[1], failedReason.getInt(p.getResult()), eligibilityReasons)) {
@@ -212,7 +214,7 @@ public final class Editor245Hooks {
                 }
             }
         });
-        XposedBridge.hookMethod(render, new StrictHook() {
+        HookDiagnostics.hookMethod(render, new StrictHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 p.setObjectExtra(PREVIOUS, modelScope.get());
                 Object node = p.args[4];
@@ -236,13 +238,13 @@ public final class Editor245Hooks {
                 if (previous == null) modelScope.remove(); else modelScope.set(previous);
             }
         });
-        XposedBridge.hookMethod(text, new StrictHook() {
+        HookDiagnostics.hookMethod(text, new StrictHook() {
             @Override protected void before(MethodHookParam p) {
                 ModelScope scope = modelScope.get();
                 if (scope != null && scope.node == p.thisObject) p.setResult(scope.selected);
             }
         });
-        XposedBridge.hookMethod(paint, new StrictHook() {
+        HookDiagnostics.hookMethod(paint, new StrictHook() {
             @Override protected void after(MethodHookParam p) {
                 ModelScope scope = modelScope.get();
                 if (p.hasThrowable() || scope == null || !(p.getResult() instanceof TextPaint)) return;
@@ -257,12 +259,12 @@ public final class Editor245Hooks {
                 }
             }
         });
-        XposedBridge.hookMethod(populate, new StrictHook() {
+        HookDiagnostics.hookMethod(populate, new StrictHook() {
             @Override protected void after(MethodHookParam p) throws Throwable {
                 if (!p.hasThrowable()) row(p.thisObject);
             }
         });
-        XposedBridge.hookMethod(click, new StrictHook() {
+        HookDiagnostics.hookMethod(click, new StrictHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 Object selected = findPreference.invoke(p.thisObject, KEY);
                 if (selected == null || selected != p.args[0]) return;

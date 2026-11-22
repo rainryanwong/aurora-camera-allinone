@@ -1,5 +1,7 @@
 package com.aurora.camera.compat.filter;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.app.*;
 import android.content.*;
 import android.content.res.Configuration;
@@ -41,11 +43,17 @@ public final class LutPage229 {
         destroy=h.method("androidx.fragment.app.m","onDestroy");
     }
     private Page page(Activity owner){WeakReference<Page> ref=pages.get(owner);return ref==null?null:ref.get();}
+    public void refreshImportedFilters(Activity owner){
+        Page page=page(owner);
+        if(page==null||!page.dialog.isShowing())return;
+        try{page.entries=runtime.entries();page.renderList();}
+        catch(ReflectiveOperationException|IllegalStateException failure){page.fail(failure);}
+    }
     public void install(){
-        XposedBridge.hookMethod(settings,new StrictHook(){@Override protected void after(MethodHookParam p){if(!p.hasThrowable())options.addAction(p.thisObject,"aurora_lut_import_effects229","滤镜导入与效果","导入滤镜，设置每款滤镜的颗粒和柔光","pref_aurora_filter_manager",()->{
+        HookDiagnostics.hookMethod(settings,new StrictHook(){@Override protected void after(MethodHookParam p){if(!p.hasThrowable())options.addAction(p.thisObject,"aurora_lut_import_effects229","滤镜导入与效果","导入滤镜，设置每款滤镜的颗粒和柔光","pref_aurora_filter_manager",()->{
             Activity owner=(Activity)XposedHelpers.callMethod(p.thisObject,"requireActivity");Page page=page(owner);if(page==null){page=new Page(owner,p.thisObject);pages.put(owner,new WeakReference<>(page));}page.show();
         });}});
-        XposedBridge.hookMethod(destroy,new StrictHook(){@Override protected void before(MethodHookParam p){Page page=page((Activity)p.thisObject);pages.remove((Activity)p.thisObject);if(page!=null){page.dismissProgress();page.dialog.dismiss();}}});
+        HookDiagnostics.hookMethod(destroy,new StrictHook(){@Override protected void before(MethodHookParam p){Page page=page((Activity)p.thisObject);pages.remove((Activity)p.thisObject);if(page!=null){page.dismissProgress();page.dialog.dismiss();}}});
     }
     private final class Page {
         final Activity owner;final Object fragment;final Dialog dialog;final LinearLayout root,body;final boolean dark;final int foreground,background,muted,card;
@@ -83,7 +91,7 @@ public final class LutPage229 {
             try{entries=runtime.entries();}catch(ReflectiveOperationException|IllegalStateException failure){fail(failure);return false;}
             body.removeAllViews();TextView title=text("滤镜导入与效果",32,foreground);title.setPadding(dp(16),dp(8),0,dp(18));body.addView(title);
             LinearLayout note=card();note.addView(text("Rec.709 3D LUT",18,foreground));note.addView(text("支持 16、17、32、33、64、65 阶 .cube；DOMAIN 必须为 0–1。不支持 1D shaper。导入后在本机转换为相机原生 LUT。",14,muted));
-            LinearLayout action=card();action.setPadding(dp(16),dp(6),dp(16),dp(6));item(action,"导入滤镜","支持单个滤镜和 ZIP 整合包，整合包可选择要导入的滤镜",0).setOnClickListener(v->{dialog.dismiss();importFilters.accept(fragment);});
+            LinearLayout action=card();action.setPadding(dp(16),dp(6),dp(16),dp(6));item(action,"导入滤镜","支持单个滤镜和 ZIP 整合包，整合包可选择要导入的滤镜",0).setOnClickListener(v->importFilters.accept(fragment));
             LinearLayout restore=card();restore.setPadding(0,0,0,0);restoreAction(restore);
             // Same field, card padding and live substring search as filter management.
             LinearLayout tools=card();tools.setPadding(dp(14),dp(2),dp(14),dp(2));GradientDrawable shape=new GradientDrawable();shape.setColor(card);shape.setCornerRadius(dp(20));tools.setBackground(shape);

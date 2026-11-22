@@ -1,8 +1,9 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.view.View;
 import android.graphics.drawable.Drawable;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
@@ -34,10 +35,10 @@ public final class HdrPresentation214Hooks {
             public String id(){return "214.native-hdr-icons-and-tip";}
             public void install(){
                 // Stock o() calls J("auto") twice, including for normal/on.
-                XposedBridge.hookMethod(normalIcons,new StrictHook(){
+                HookDiagnostics.hookMethod(normalIcons,new StrictHook(){
                     @Override protected void before(MethodHookParam p){p.setResult(new int[]{normalTop,normalTop});}
                 });
-                XposedBridge.hookMethod(bind,new StrictHook(){
+                HookDiagnostics.hookMethod(bind,new StrictHook(){
                     @Override protected void before(MethodHookParam p)throws Throwable{
                         Object config=p.args[4];if(config==null||configId.getInt(config)!=194)return;
                         Object row=p.args[1];String selected=(String)rowValue.get(row);
@@ -48,25 +49,25 @@ public final class HdrPresentation214Hooks {
                         rowImage.setInt(row,icon);p.args[5]=icon;
                     }
                 });
-                XposedBridge.hookMethod(topFactory,new StrictHook(){
+                HookDiagnostics.hookMethod(topFactory,new StrictHook(){
                     @Override protected void after(MethodHookParam p)throws Throwable{
                         if(p.hasThrowable()||!hdr.isInstance(p.args[0])||!isOn((String)value.invoke(p.args[0],topMode.getInt(p.thisObject))))return;
                         Object builder=topBuilder.get(p.thisObject);topImage.setInt(builder,normalTop);topAnimation.setInt(builder,0);
                     }
                 });
-                XposedBridge.hookMethod(menuFactory,new StrictHook(){
+                HookDiagnostics.hookMethod(menuFactory,new StrictHook(){
                     @Override protected void after(MethodHookParam p)throws Throwable{
                         if(p.hasThrowable()||!hdr.isInstance(p.args[0])||!isOn((String)value.invoke(p.args[0],menuMode.getInt(p.thisObject))))return;
                         Object builder=menuBuilder.get(p.thisObject);menuImage.setInt(builder,normalTop);menuAnimation.setInt(builder,0);
                     }
                 });
-                XposedBridge.hookMethod(click,new StrictHook(){
+                HookDiagnostics.hookMethod(click,new StrictHook(){
                     @Override protected void before(MethodHookParam p)throws Throwable{
                         p.setObjectExtra("214.hdr.click",clicks.get());clicks.set(clickMode.getInt(p.thisObject));
                     }
                     @Override protected void after(MethodHookParam p){restore(clicks,(Integer)p.getObjectExtra("214.hdr.click"));}
                 });
-                XposedBridge.hookMethod(notify,new StrictHook(){
+                HookDiagnostics.hookMethod(notify,new StrictHook(){
                     @Override protected void before(MethodHookParam p)throws Throwable{
                         Integer mode=clicks.get();if(mode==null||tip.getInt(p.thisObject)!=tipAuto)return;
                         Object owner=component.invoke(repository.invoke(null),hdr);

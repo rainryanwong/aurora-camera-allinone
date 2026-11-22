@@ -1,7 +1,8 @@
 package com.aurora.camera.compat.filter;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import com.aurora.camera.compat.StrictHook;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Method;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -15,7 +16,7 @@ public final class CamStyleAccess260 {
     // The outermost callback includes native code, R2 normalization and LUT
     // projection. Nested native calls and module wrappers use the same lock.
     static void guard(Method method,Class<?> owner){
-        XposedBridge.hookMethod(method,new StrictHook(3000){
+        HookDiagnostics.hookMethod(method,new StrictHook(3000){
             @Override protected void before(MethodHookParam p){
                 if(!owner.isInstance(p.thisObject))return;
                 lock();p.setObjectExtra(HELD,true);

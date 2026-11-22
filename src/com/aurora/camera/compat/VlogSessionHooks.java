@@ -1,7 +1,8 @@
 package com.aurora.camera.compat;
 
-import de.robv.android.xposed.XC_MethodReplacement;
-import de.robv.android.xposed.XposedBridge;
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
+import com.aurora.camera.diagnostics.ObservedReplacement;
 import java.lang.reflect.Method;
 
 /** F19: aurora's accepted normal-session/OIS route; module entry guards the device. */
@@ -16,8 +17,8 @@ public final class VlogSessionHooks {
         return new HookPlan() {
             public String id() { return "F19.vlog-aurora-session"; }
             public void install() {
-                XposedBridge.hookMethod(session, XC_MethodReplacement.returnConstant(0));
-                XposedBridge.hookMethod(eis, XC_MethodReplacement.returnConstant(false));
+                HookDiagnostics.hookMethod(session, ObservedReplacement.returnConstant(0));
+                HookDiagnostics.hookMethod(eis, ObservedReplacement.returnConstant(false));
             }
         };
     }

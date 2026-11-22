@@ -1,5 +1,7 @@
 package com.aurora.camera.compat.filter;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.util.Log;
 import android.os.Handler;
 import android.os.Looper;
@@ -7,7 +9,6 @@ import android.widget.Toast;
 import com.aurora.camera.compat.Host;
 import com.aurora.camera.compat.Options229;
 import com.aurora.camera.compat.StrictHook;
-import de.robv.android.xposed.XposedBridge;
 import java.io.IOException;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Constructor;
@@ -24,11 +25,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /** Imported PNG LUTs in the stock video component and HAL filter protocol. */
 public final class ImportedVideoLut256 {
+    private static final int VIDEO=162, DIRECTOR=164, PRO_VIDEO=180;
     private static final int VALUE_BASE=0x400000fd, SLOT_MASK=0x1ff00;
     private final LutRuntime229 runtime;
     private final Options229 options;
     private final Class<?> videoType,configType,cinematicType,cinematicConfigType,strengthType,strengthConfigType;
-    private final Method init,cloudInit,nativeCatalog,configMode,configRepository,runningRepository,repositoryItem;
+    private final Method init,cloudInit,cloudItem,nativeCatalog,configMode,configRepository,runningRepository,repositoryItem;
     private final Method getValue,setValue,defaultValue,mapperGet,map,logEnabled,videoId,degree,degreeConfigMode,cameraRepository,cameraConfig,strengthValue,workspaceValue,switchOn;
     private final NativeVideoLutWriter256 writer;
     private final Method panelInit,panelDestroy,panelIndex,notifyAdapter;
@@ -50,6 +52,7 @@ public final class ImportedVideoLut256 {
         videoType=h.type("v2.e0");configType=h.type("r2.F");cinematicType=h.type("v2.u");cinematicConfigType=h.type("r2.l");
         strengthType=h.type("v2.W");strengthConfigType=h.type("r2.u");
         init=h.method("v2.e0","e",int.class);cloudInit=h.method("v2.e0","d",int.class,Map.class);
+        cloudItem=h.method("si.f","b",int.class,int.class);
         nativeCatalog=h.method("v2.e0","o",int.class);configMode=h.method("r2.F","q",int.class);
         configRepository=h.method("g2.a","a");runningRepository=h.method("g2.a","j");repositoryItem=h.method("Xh.b","x",Class.class);
         getValue=h.method("com.android.camera.data.data.c","getComponentValue",int.class);
@@ -76,7 +79,8 @@ public final class ImportedVideoLut256 {
         adapterRows=h.field("com.android.camera.fragment.d","f");listRows=h.field("com.android.camera2.compat.theme.custom.cv.FilterSelectViewCV","a");listIndex=h.field("com.android.camera2.compat.theme.custom.cv.FilterSelectViewCV","b");
     }
 
-    public static boolean supportsMode(int mode){return mode==162||mode==180;}
+    public static boolean supportsMode(int mode){return mode==VIDEO||mode==DIRECTOR||mode==PRO_VIDEO;}
+    private static int catalogMode(int mode){return mode==DIRECTOR?VIDEO:mode;}
     public static int value(int slot){if(slot<1||slot>LutStore229.SLOTS)throw new IllegalArgumentException("LUT slot "+slot);return VALUE_BASE|((slot-1)<<8);}
     public static int slot(int value){return (value&~SLOT_MASK)==VALUE_BASE?((value>>>8)&511)+1:0;}
     private int mode()throws IllegalAccessException{return currentMode.getInt(null);}
@@ -110,8 +114,9 @@ public final class ImportedVideoLut256 {
 
     @SuppressWarnings("unchecked") private void project(Object owner,int mode)throws ReflectiveOperationException{
         if(!supportsMode(mode))return;
+        int catalogMode=catalogMode(mode);
         List<?> current=sources.get(owner);if(current==null)current=(List<?>)items.get(owner);if(current==null)return;
-        current=withLooks(current,owner,mode);
+        current=withLooks(current,owner,catalogMode);
         LutStore229 store=runtime.store();Set<Integer> enabled=new HashSet<>();if(eligible(mode)){Set<String> hidden=new VideoFilterWorkspace270(runtime,options.context()).hidden();for(int slot:store.configuredSlots())if(FilterWorkspace215.shown(hidden,LutStore229.token(slot),store.enabled(slot)))enabled.add(slot);}
         ArrayList<Object> next=new ArrayList<>();Set<Integer> present=new HashSet<>();
         for(Object row:current){
@@ -123,7 +128,7 @@ public final class ImportedVideoLut256 {
         }
         ArrayList<Object> missing=new ArrayList<>();
         if(!present.containsAll(enabled)){
-            List<?> catalog=(List<?>)nativeCatalog.invoke(null,mode);
+            List<?> catalog=(List<?>)nativeCatalog.invoke(null,catalogMode);
             // e0.p() returns an empty list while the native catalog protocol is absent.
             if(catalog.isEmpty())return;
             Object template=catalog.get(0);int order=next.size();
@@ -135,7 +140,7 @@ public final class ImportedVideoLut256 {
         }
         if(!missing.isEmpty()){
             Object mapper=mapperGet.invoke(mapperProvider.get(null));
-            List<?> mapped=(List<?>)map.invoke(mapper,mode,missing,capabilities.get(owner));
+            List<?> mapped=(List<?>)map.invoke(mapper,catalogMode,missing,capabilities.get(owner));
             for(Object row:mapped){int slot=slot(Integer.parseInt((String)itemValue.get(row)));itemName.setInt(row,-1);itemLabel.set(row,store.label(LutStore229.token(slot),store.name(slot)));next.add(row);}
         }
         VideoFilterWorkspace270 workspace=new VideoFilterWorkspace270(runtime,options.context());
@@ -228,19 +233,37 @@ public final class ImportedVideoLut256 {
     }
     public void install()throws ReflectiveOperationException{
         StrictHook rebuild=new StrictHook(){
-          @Override protected void before(MethodHookParam p){rebuilding.set(rebuilding.get()+1);}
+          @Override protected void before(MethodHookParam p){
+            rebuilding.set(rebuilding.get()+1);
+            int mode=(Integer)p.args[0];
+            p.setObjectExtra("video-filter-mode",mode);
+            // Construct the same catalog as Video, keeping the director preference key for selection.
+            p.args[0]=catalogMode(mode);
+          }
           @Override protected void after(MethodHookParam p)throws Throwable{
             int depth=rebuilding.get()-1;if(depth==0)rebuilding.remove();else rebuilding.set(depth);
-            if(depth>0||p.hasThrowable()||Boolean.TRUE.equals(managementLoading.get())||options.context()==null||!supportsMode((Integer)p.args[0]))return;
+            int mode=(Integer)p.getObjectExtra("video-filter-mode");
+            p.args[0]=mode;
+            if(depth>0||p.hasThrowable()||Boolean.TRUE.equals(managementLoading.get())||options.context()==null||!supportsMode(mode))return;
             @SuppressWarnings("unchecked") List<Object> source=(List<Object>)items.get(p.thisObject);
-            sources.put(p.thisObject,new ArrayList<>(source));remember(p.thisObject);project(p.thisObject,(Integer)p.args[0]);
+            sources.put(p.thisObject,new ArrayList<>(source));remember(p.thisObject);project(p.thisObject,mode);
         }};
-        XposedBridge.hookMethod(init,rebuild);XposedBridge.hookMethod(cloudInit,rebuild);
-        XposedBridge.hookMethod(panelInit,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(init,rebuild);HookDiagnostics.hookMethod(cloudInit,rebuild);
+        HookDiagnostics.hookMethod(cloudItem,new StrictHook(){
+            @Override protected void before(MethodHookParam p){
+                if((Integer)p.args[0]!=DIRECTOR)return;
+                p.args[0]=VIDEO;
+                p.setObjectExtra("director-video-cloud-filter",Boolean.TRUE);
+            }
+            @Override protected boolean countsAsRun(MethodHookParam p){
+                return Boolean.TRUE.equals(p.getObjectExtra("director-video-cloud-filter"));
+            }
+        });
+        HookDiagnostics.hookMethod(panelInit,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
             if(!p.hasThrowable()&&videoType.isInstance(p.args[0])&&supportsMode(panelMode.getInt(p.args[2])))visiblePanel=new WeakReference<>(p.args[2]);
         }});
-        XposedBridge.hookMethod(panelDestroy,new StrictHook(){@Override protected void after(MethodHookParam p){if(visiblePanel.get()==p.thisObject)visiblePanel.clear();}});
-        XposedBridge.hookMethod(workspaceValue,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(panelDestroy,new StrictHook(){@Override protected void after(MethodHookParam p){if(visiblePanel.get()==p.thisObject)visiblePanel.clear();}});
+        HookDiagnostics.hookMethod(workspaceValue,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
             int mode=(Integer)p.args[0];if(!supportsMode(mode)||!videoType.isInstance(p.thisObject))return;
             String value=(String)p.args[1];int slot=slot(Integer.parseInt(value));
             if(new VideoFilterWorkspace270(runtime,options.context()).hidden().contains(VideoFilterWorkspace270.identity(Integer.parseInt(value)))){p.setResult(defaultValue.invoke(p.thisObject,mode));return;}
@@ -248,17 +271,17 @@ public final class ImportedVideoLut256 {
             if(slot==0&&look==0)return;
             p.setResult(eligible(mode)&&(look>0||videoEnabled(slot))?value:defaultValue.invoke(p.thisObject,mode));
         }});
-        XposedBridge.hookMethod(videoId,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(videoId,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
             int mode=mode(),value=selectedValue(mode),slot=slot(value),look=LeicaLooks273.videoOrdinal(value);if(slot==0&&look==0)return;
             if(slot>0&&!videoEnabled(slot)){p.setResult(0);return;}
             try{p.setResult(look>0?publishLook(look):publish(slot));}catch(IOException failure){publicationFailed(mode,look>0?value:slot,failure);p.setResult(0);}
         }});
-        XposedBridge.hookMethod(switchOn,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(switchOn,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
             int mode=(Integer)p.args[0];if(!supportsMode(mode))return;
             int value=Integer.parseInt((String)getValue.invoke(p.thisObject,mode)),slot=slot(value);
             if(LeicaLooks273.videoOrdinal(value)>0)p.setResult(eligible(mode));else if(slot>0)p.setResult(eligible(mode)&&videoEnabled(slot));
         }});
-        XposedBridge.hookMethod(degree,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(degree,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
             int mode=mode(),value=selectedValue(mode),slot=slot(value),look=LeicaLooks273.videoOrdinal(value);
             if(look==0&&(slot==0||!videoEnabled(slot)))return;
             boolean config=(Boolean)degreeConfigMode.invoke(null,mode);

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>相机模块</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="groups.js" defer></script>
+  <script src="feature-help.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <main>
+    <header class="hero">
+      <p id="module-version">Xiaomi 14 Ultra</p>
+      <h1>相机模块</h1>
+    </header>
+
+    <section class="log-card" aria-labelledby="log-title">
+      <div class="log-icon" aria-hidden="true"><span></span></div>
+      <h2 id="log-title">相机日志</h2>
+      <button id="save-camera" class="primary" type="button">保存相机日志</button>
+      <p class="log-description">遇到相机异常后，保存最近 5 分钟内仍在缓冲区的相机日志到 Download</p>
+      <p id="camera-message" class="notice" role="status" hidden></p>
+    </section>
+
+    <section class="log-card" aria-labelledby="preview-title">
+      <h2 id="preview-title">预览逐帧诊断</h2>
+      <p class="log-description">开始后回到相机。遇到异常，在通知栏点「标记异常」，继续取景几秒，再回来导出。</p>
+      <p class="log-description">保留标记前最近约 60 秒和标记后 5 秒的参数。也可以手动停止并导出已记录的数据。单次采集最多 10 分钟。</p>
+      <p id="preview-state" class="notice" role="status">已关闭</p>
+      <div class="preview-actions">
+        <button id="preview-toggle" class="primary" type="button">开始采集</button>
+        <button id="preview-export" class="secondary" type="button" disabled>导出到 Download</button>
+      </div>
+      <button id="preview-permission" class="secondary" type="button" hidden>打开通知设置</button>
+      <p id="preview-message" class="notice" role="status" hidden></p>
+    </section>
+
+    <section class="diagnostics" aria-labelledby="diagnostics-title">
+      <header class="section-head">
+        <div>
+          <h2 id="diagnostics-title">模块运行诊断</h2>
+          <p id="last-refresh">查看 Hook 注册、触发和挂载状态</p>
+        </div>
+        <button id="refresh" class="secondary" type="button">刷新</button>
+      </header>
+      <div class="panel summary">
+        <div><strong id="registered">—</strong><span>已注册</span></div>
+        <div><strong id="ran">—</strong><span>已触发</span></div>
+        <div><strong id="errors">—</strong><span>异常</span></div>
+      </div>
+      <p id="status-message" class="notice" role="status" hidden></p>
+      <button id="export" class="secondary export" type="button">导出诊断日志</button>
+      <p id="export-message" class="notice" role="status" hidden></p>
+      <div class="filters" role="group" aria-label="筛选诊断结果">
+        <button type="button" data-filter="all" aria-pressed="true">全部</button>
+        <button type="button" data-filter="error" aria-pressed="false">有异常</button>
+        <button type="button" data-filter="pending" aria-pressed="false">待触发</button>
+      </div>
+      <div id="results"></div>
+    </section>
+  </main>
+  <dialog id="feature-dialog" aria-labelledby="feature-title" aria-describedby="feature-description feature-steps">
+    <div class="dialog-body">
+      <h2 id="feature-title"></h2>
+      <p id="feature-description"></p>
+      <div class="reproduction">
+        <h3>怎么复现</h3>
+        <p id="feature-steps"></p>
+      </div>
+      <button id="close-feature" class="secondary" type="button" autofocus>关闭</button>
+    </div>
+  </dialog>
+</body>
+</html>

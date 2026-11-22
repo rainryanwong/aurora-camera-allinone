@@ -1,12 +1,12 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.Context;
 import android.os.Bundle;
 import android.util.Log;
 import com.aurora.camera.compat.ambilight.LocalInstallFailure;
 import com.aurora.camera.compat.ambilight.ModuleAssets;
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -114,7 +114,7 @@ public final class AmbilightHooks {
             }
 
             @Override public void install() {
-                XposedBridge.hookMethod(configStream, new StrictHook() {
+                HookDiagnostics.hookMethod(configStream, new StrictHook() {
                     @Override protected void before(MethodHookParam param) {
                         Context owner = (Context) param.args[0];
                         if ("com.android.camera".equals(owner.getPackageName())
@@ -123,7 +123,7 @@ public final class AmbilightHooks {
                         }
                     }
                 });
-                XposedBridge.hookMethod(copyBuiltIn, new StrictHook() {
+                HookDiagnostics.hookMethod(copyBuiltIn, new StrictHook() {
                     @Override protected void before(MethodHookParam param)
                             throws Throwable {
                         try {
@@ -143,7 +143,7 @@ public final class AmbilightHooks {
                         }
                     }
                 });
-                XposedBridge.hookMethod(install, new StrictHook() {
+                HookDiagnostics.hookMethod(install, new StrictHook() {
                     @Override protected void before(MethodHookParam param)
                             throws Throwable {
                         try {
@@ -164,7 +164,7 @@ public final class AmbilightHooks {
                         }
                     }
                 });
-                XposedBridge.hookMethod(start, new StrictHook() {
+                HookDiagnostics.hookMethod(start, new StrictHook() {
                     @Override protected void after(MethodHookParam param)
                             throws Throwable {
                         try {
@@ -180,7 +180,7 @@ public final class AmbilightHooks {
                         }
                     }
                 });
-                XposedBridge.hookMethod(enter, new StrictHook() {
+                HookDiagnostics.hookMethod(enter, new StrictHook() {
                     @Override protected void before(MethodHookParam param)
                             throws Throwable {
                         try {

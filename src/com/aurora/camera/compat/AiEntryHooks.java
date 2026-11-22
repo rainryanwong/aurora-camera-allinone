@@ -1,10 +1,10 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.Context;
 import android.os.Handler;
 import android.os.Message;
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -33,7 +33,7 @@ public final class AiEntryHooks {
             public void install() {
                 final ThreadLocal<Object> runHandler = new ThreadLocal<>();
                 final ThreadLocal<Object> accountContext = new ThreadLocal<>();
-                XposedBridge.hookMethod(run, new StrictHook() {
+                HookDiagnostics.hookMethod(run, new StrictHook() {
                     @Override protected void before(MethodHookParam p) throws Throwable {
                         p.setObjectExtra(RUN, runHandler.get());
                         // The packed-switch's sole entry is variant zero: startup. The default
@@ -47,19 +47,19 @@ public final class AiEntryHooks {
                         if (previous == null) runHandler.remove(); else runHandler.set(previous);
                     }
                 });
-                XposedBridge.hookMethod(send, new StrictHook() {
+                HookDiagnostics.hookMethod(send, new StrictHook() {
                     @Override protected void before(MethodHookParam p) {
                         if ((Integer) p.args[0] == 11 && p.thisObject == runHandler.get())
                             p.setResult(false); // No message was enqueued; the deleted call had no result consumer.
                     }
                 });
-                XposedBridge.hookMethod(handle, new StrictHook() {
+                HookDiagnostics.hookMethod(handle, new StrictHook() {
                     @Override protected void before(MethodHookParam p) {
                         // Actual packed-switch starts at 1; its removed toast branch is 13.
                         if (((Message) p.args[0]).what == 13) p.setResult(null);
                     }
                 });
-                XposedBridge.hookMethod(workflow, new StrictHook() {
+                HookDiagnostics.hookMethod(workflow, new StrictHook() {
                     @Override protected void before(MethodHookParam p) {
                         p.setObjectExtra(ACCOUNT, accountContext.get()); accountContext.set(p.args[0]);
                     }
@@ -68,7 +68,7 @@ public final class AiEntryHooks {
                         if (previous == null) accountContext.remove(); else accountContext.set(previous);
                     }
                 });
-                XposedBridge.hookMethod(account, new StrictHook() {
+                HookDiagnostics.hookMethod(account, new StrictHook() {
                     @Override protected void after(MethodHookParam p) {
                         Object expected = accountContext.get();
                         if (!p.hasThrowable() && expected != null && expected == p.args[0]) p.setResult(true);

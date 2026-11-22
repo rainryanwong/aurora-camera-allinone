@@ -1,5 +1,7 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.*;
@@ -24,7 +26,8 @@ import java.util.concurrent.*;
 /** Native camera preference pages for user filters and complete settings backup. */
 public final class Laboratory253Hooks {
     private static final String PAGE="aurora_settings_page253",CUSTOM="aurora_custom_filter_manager253",BACKUP="aurora_settings_backup253",BOUND="aurora_filter_selection253",SEARCH="aurora_filter_search254";
-    private static final int IMPORT=0x53a1,WRITE=0x53a2,RESTORE=0x53a3;
+    private static final String IMPORT_SOURCE="import-source";
+    private static final int IMPORT=0x53a1,WRITE=0x53a2,RESTORE=0x53a3,IMPORT_SELECTION=0x53a4;
     private final Host host;
     private final LutRuntime229 runtime;
     private final NativePreferences240 preferences;
@@ -35,6 +38,7 @@ public final class Laboratory253Hooks {
     private final Map<Object,Page> pages=new WeakHashMap<>();
     private final Map<String,ImportJob> imports=new HashMap<>();
     private final Method lab,populate,register,initialize,resume,update,result,destroy,bind,bindText,start;
+    private java.util.function.Consumer<Activity> importRefresh;
     private CustomFilterStore253 store;
     public Laboratory253Hooks(Host host,LutRuntime229 runtime)throws ReflectiveOperationException{
         this.host=host;this.runtime=runtime;preferences=new NativePreferences240(host);dialogs=new MiuixDialogs(host);options=new Options229(host);
@@ -62,56 +66,72 @@ public final class Laboratory253Hooks {
         if(store==null)try{store=new CustomFilterStore253(host,runtime);}catch(ReflectiveOperationException failure){throw new IllegalStateException(failure);}return store;
     }
     public void install(){
-        XposedBridge.hookMethod(lab,new StrictHook(2000){@Override protected void after(MethodHookParam p){
+        HookDiagnostics.hookMethod(lab,new StrictHook(2000){@Override protected void after(MethodHookParam p){
             if(p.hasThrowable())return;Object f=p.thisObject;
             options.addSwitch(f,ViewfinderDebugHooks.PARAMETERS,"取景参数调试","在取景器显示对焦、白平衡、ISO、快门及 HDR 和夜景状态。重新打开相机后生效",null,null);
             options.addSwitch(f,ViewfinderDebugHooks.LAYOUT,"界面布局调试面板","在取景器显示调试按钮，点击后查看各区域边框。重新打开相机后生效",null,null);
             options.addAction(f,CUSTOM,"自定义滤镜管理","搜索、去重和批量删除自建配方与导入滤镜",()->open(f,"filters"));
             options.addAction(f,BACKUP,"备份与恢复","备份相机设置、菜单与模式布局及模块选项",()->open(f,"backup"));
             options.addSwitch(f,FilterStrength270.KEY,"滤镜强度调节","打开照片滤镜面板时显示强度操作条",null,null);
-            options.addSwitch(f,SuperTelephotoHooks.THREE_STATES,"AI超级长焦三档切换","提供关闭、自动、开启三档选择",null,null);
+            options.addSwitch(f,SuperTelephotoHooks.TOGGLE_OPTIMIZATION,"AI超级长焦开关优化","优化调整为关闭和开启两档。",null,null);
             options.addSwitch(f,SuperTelephotoHooks.ZOOM10,"AI超级长焦10倍及以上启用","将超级长焦增强的启用倍率调整为10×及以上",null,null);
-            SuperTelephotoHooks.mergeLensOptions(options.prefs());
-            options.addSwitch(f,SuperTelephotoHooks.EXTENDED,"AI超级长焦扩展镜头支持","将AI超级长焦算法进一步放开至主摄及3.2x镜头可用，经实测，多数场景下增强后效果不及原图直出，请根据实际情况选择启用，而非盲目开启。",null,null);
             preferences.regroupLaboratoryTools(f);
             options.addAction(f,CameraCloudControls.ENTRY,CameraCloudControls.TITLE,
                     "自定义开启相机下发云控能力",BACKUP,()->open(f,CameraCloudControls.PAGE));
-            options.addSwitch(f,OisReinitHooks.KEY,"相机防抖异常修复（实验性）",
-                    "尝试修复部分场景下，OIS光学防抖异常运行的问题。",CameraCloudControls.ENTRY,null);
         }});
-        XposedBridge.hookMethod(populate,new StrictHook(){@Override protected void before(MethodHookParam p){
+        HookDiagnostics.hookMethod(populate,new StrictHook(){@Override protected void before(MethodHookParam p){
             String kind=kind(p.thisObject);if(kind==null)return;Page page=page(p.thisObject,kind);page.render();if(!kind.equals("backup")&&!kind.equals(CameraCloudControls.PAGE))main.post(page::load);p.setResult(null);
         }});
-        XposedBridge.hookMethod(register,new StrictHook(){@Override protected void before(MethodHookParam p){if(kind(p.thisObject)!=null)p.setResult(null);}});
-        XposedBridge.hookMethod(update,new StrictHook(){@Override protected void before(MethodHookParam p){if(kind(p.thisObject)!=null)p.setResult(null);}});
-        StrictHook title=new StrictHook(){@Override protected void after(MethodHookParam p){if(!p.hasThrowable()&&kind(p.thisObject)!=null){Page page=page(p.thisObject,kind(p.thisObject));page.title();if(page.resumeImportJob())return;if(p.method.equals(resume)){page.launchImport();if(!page.kind.equals("backup")&&page.loaded&&!page.busy&&state(p.thisObject).getInt("document",0)==0){page.loaded=false;page.load();}}}}};
-        XposedBridge.hookMethod(initialize,title);XposedBridge.hookMethod(resume,title);
-        XposedBridge.hookMethod(result,new StrictHook(){@Override protected void after(MethodHookParam p){
-            if(p.hasThrowable()||kind(p.thisObject)==null)return;Page page=page(p.thisObject,kind(p.thisObject));int request=(Integer)p.args[0];
+        HookDiagnostics.hookMethod(register,new StrictHook(){@Override protected void before(MethodHookParam p){if(kind(p.thisObject)!=null)p.setResult(null);}});
+        HookDiagnostics.hookMethod(update,new StrictHook(){@Override protected void before(MethodHookParam p){if(kind(p.thisObject)!=null)p.setResult(null);}});
+        StrictHook title=new StrictHook(){@Override protected void after(MethodHookParam p){
+            if(p.hasThrowable())return;String kind=kind(p.thisObject);
+            if(kind==null){if(p.method.equals(resume)){Page page=importSource(p.thisObject);if(page!=null)page.resumeImportJob();}return;}
+            Page page=page(p.thisObject,kind);page.title();if(page.resumeImportJob())return;
+            if(p.method.equals(resume)&&!kind.equals("backup")&&page.loaded&&!page.busy&&state(p.thisObject).getInt("document",0)==0){page.loaded=false;page.load();}
+        }};
+        HookDiagnostics.hookMethod(initialize,title);HookDiagnostics.hookMethod(resume,title);
+        HookDiagnostics.hookMethod(result,new StrictHook(){@Override protected void after(MethodHookParam p){
+            if(p.hasThrowable())return;int request=(Integer)p.args[0];if(request!=IMPORT&&request!=IMPORT_SELECTION&&request!=WRITE&&request!=RESTORE)return;
+            String kind=kind(p.thisObject);Page page=kind==null?importSource(p.thisObject):page(p.thisObject,kind);if(page==null)return;
             if(request!=state(p.thisObject).getInt("document",0))return;state(p.thisObject).remove("document");XposedHelpers.setBooleanField(p.thisObject,"mGoToActivity",false);
-            if((Integer)p.args[1]==Activity.RESULT_OK)page.document(request,(Intent)p.args[2]);
+            if((Integer)p.args[1]==Activity.RESULT_OK){
+                if(request==IMPORT_SELECTION)importRefresh.accept(activity(p.thisObject));
+                else page.document(request,(Intent)p.args[2]);
+            }
         }});
-        XposedBridge.hookMethod(destroy,new StrictHook(){@Override protected void before(MethodHookParam p){Page page=pages.remove(p.thisObject);if(page!=null){page.dismissProgress();ImportJob job=imports.get(state(p.thisObject).getString("import_job"));if(job!=null){if(job.page.get()==page)job.page.clear();if(!activity(p.thisObject).isChangingConfigurations()){job.abandoned=true;finishImportJob(job);}}else if(page.kind.equals("import")&&!activity(p.thisObject).isChangingConfigurations())page.discardImport();}}});
-        XposedBridge.hookMethod(bind,new StrictHook(){@Override protected void after(MethodHookParam p){
+        HookDiagnostics.hookMethod(destroy,new StrictHook(){@Override protected void before(MethodHookParam p){Page page=pages.remove(p.thisObject);if(page!=null){page.dismissProgress();ImportJob job=imports.get(state(p.thisObject).getString("import_job"));if(job!=null){if(job.page.get()==page)job.page.clear();if(!activity(p.thisObject).isChangingConfigurations()){job.abandoned=true;finishImportJob(job);}}else if(page.kind.equals("import")&&!activity(p.thisObject).isChangingConfigurations())page.discardImport();}}});
+        HookDiagnostics.hookMethod(bind,new StrictHook(){@Override protected void after(MethodHookParam p){
             if(p.hasThrowable())return;View item=(View)XposedHelpers.getObjectField(p.args[0],"itemView");Object metadata=XposedHelpers.getAdditionalInstanceField(p.thisObject,BOUND);
             if(metadata instanceof Object[]){Object[] data=(Object[])metadata;Page page=(Page)data[0];String id=(String)data[1];item.setOnLongClickListener(view->{page.selecting=true;page.selected.add(id);page.save();page.refreshRows();return true;});XposedHelpers.setAdditionalInstanceField(item,BOUND,true);}
             else if(XposedHelpers.removeAdditionalInstanceField(item,BOUND)!=null)item.setOnLongClickListener(null);
         }});
-        XposedBridge.hookMethod(bindText,new StrictHook(){@Override protected void after(MethodHookParam p){
+        HookDiagnostics.hookMethod(bindText,new StrictHook(){@Override protected void after(MethodHookParam p){
             if(p.hasThrowable())return;Object owner=XposedHelpers.getAdditionalInstanceField(p.thisObject,SEARCH);
             if(owner instanceof Page)((Page)owner).bindSearch((ViewGroup)XposedHelpers.getObjectField(p.args[0],"itemView"));
         }});
     }
     private Page page(Object fragment,String kind){Page page=pages.get(fragment);if(page==null){page=new Page(fragment,kind);pages.put(fragment,page);}return page;}
-    public void openImport(Object fragment){open(fragment,"filters",true);}
-    private void open(Object fragment,String kind){open(fragment,kind,false);}
-    private void open(Object fragment,String kind,boolean importOnOpen){
+    private Page importSource(Object fragment){
+        if(!lab.getDeclaringClass().isInstance(fragment))return null;
+        Bundle args=(Bundle)call(fragment,"getArguments");if(args==null)return null;int request=args.getInt("document",0);
+        return request==IMPORT||request==IMPORT_SELECTION||args.containsKey("import_job")?page(fragment,IMPORT_SOURCE):null;
+    }
+    public void setImportRefresh(java.util.function.Consumer<Activity> refresh){importRefresh=refresh;}
+    public void openImport(Object fragment){
+        Page page=page(fragment,IMPORT_SOURCE);
+        if(page.attached()&&!page.busy&&state(fragment).getInt("document",0)==0)page.choose(IMPORT);
+    }
+    private Intent pageIntent(Object fragment,String kind){
         Activity owner=activity(fragment);Intent intent=new Intent(owner,type("com.android.camera.fragment.settings.PreferenceExtraActivity"));
         intent.putExtra("target_tag","com.android.camera.fragment.settings.CameraPreferenceFragment").putExtra(PAGE,kind);
-        intent.putExtra("import_on_open",importOnOpen);
         try{intent.putExtra("from_where",host.field("com.android.camera.fragment.settings.b","mFromWhere").getInt(null));}
         catch(ReflectiveOperationException failure){throw new IllegalStateException(failure);}
-        XposedHelpers.setBooleanField(fragment,"mGoToActivity",true);owner.startActivity(intent);
+        return intent;
+    }
+    private void open(Object fragment,String kind){
+        Intent intent=pageIntent(fragment,kind);
+        XposedHelpers.setBooleanField(fragment,"mGoToActivity",true);activity(fragment).startActivity(intent);
     }
     private void pushPage(Object fragment,Bundle args,String tag){
         Object next=XposedHelpers.newInstance(type("com.android.camera.fragment.settings.CameraPreferenceFragment"));call(next,"setArguments",args);
@@ -157,16 +177,11 @@ public final class Laboratory253Hooks {
         Object deleteAction,cancelSelection;
         Page(Object fragment,String kind){
             this.fragment=fragment;this.kind=kind;Bundle state=state(fragment);query=state.getString("query","");selecting=state.getBoolean("selecting",kind.equals("duplicates"));
+            if(kind.equals("import")&&!state.containsKey("import_token"))state.putString("import_token",activity(fragment).getIntent().getStringExtra("import_token"));
             ArrayList<String> ids=state.getStringArrayList("selected");if(ids!=null)selected.addAll(ids);
             ArrayList<String> saved=state.getStringArrayList("groups");if(saved!=null)for(String group:saved)groups.add(Arrays.asList(group.split("\n")));
         }
         boolean attached(){return(Boolean)call(fragment,"isAdded")&&!activity(fragment).isFinishing();}
-        void launchImport(){
-            Bundle saved=state(fragment);
-            if(kind.equals("filters")&&activity(fragment).getIntent().getBooleanExtra("import_on_open",false)&&!saved.getBoolean("import_launch_consumed",false)){
-                saved.putBoolean("import_launch_consumed",true);main.post(()->{if(attached())choose(IMPORT);});
-            }
-        }
         void title(){com.aurora.camera.compat.ui.NativePageTitle257.set(activity(fragment),kind.equals(CameraCloudControls.PAGE)?CameraCloudControls.TITLE:kind.equals("backup")?"备份与恢复":kind.equals("import")?"选择待导入滤镜":kind.equals("duplicates")?"重复滤镜":"自定义滤镜管理");}
         void save(){Bundle state=state(fragment);state.putString("query",query);state.putBoolean("selecting",selecting);state.putStringArrayList("selected",new ArrayList<>(selected));ArrayList<String> groupIds=new ArrayList<>();for(List<String> group:groups)groupIds.add(String.join("\n",group));state.putStringArrayList("groups",groupIds);}
         Object category(Object root,String key,String title,int order){return preferences.category(fragment,root,key,title,order);}
@@ -291,8 +306,11 @@ public final class Laboratory253Hooks {
             intent.addFlags(request==WRITE?Intent.FLAG_GRANT_WRITE_URI_PERMISSION:Intent.FLAG_GRANT_READ_URI_PERMISSION);
             if(request==IMPORT)intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);
             if(request==WRITE)intent.putExtra(Intent.EXTRA_TITLE,"相机设置备份-"+new java.text.SimpleDateFormat("yyyyMMdd-HHmmss",Locale.ROOT).format(new Date())+".zip");
+            launchForResult(intent,request);
+        }
+        boolean launchForResult(Intent intent,int request){
             state(fragment).putInt("document",request);XposedHelpers.setBooleanField(fragment,"mGoToActivity",true);
-            try{start.invoke(fragment,intent,request);}catch(ReflectiveOperationException|ActivityNotFoundException|SecurityException failure){state(fragment).remove("document");XposedHelpers.setBooleanField(fragment,"mGoToActivity",false);error(failure);}
+            try{start.invoke(fragment,intent,request);return true;}catch(ReflectiveOperationException|ActivityNotFoundException|SecurityException failure){state(fragment).remove("document");XposedHelpers.setBooleanField(fragment,"mGoToActivity",false);error(failure);return false;}
         }
         void document(int request,Intent data){
             LinkedHashSet<Uri> uris=new LinkedHashSet<>();if(data!=null){if(data.getData()!=null)uris.add(data.getData());ClipData clip=data.getClipData();if(clip!=null)for(int i=0;i<clip.getItemCount();i++)uris.add(clip.getItemAt(i).getUri());}
@@ -311,7 +329,7 @@ public final class Laboratory253Hooks {
         }
         void renderImport(Object root){
             String result=state(fragment).getString("import_result");
-            if(result!=null){Object group=category(root,"import_result",null,0);row(group,"import_result_details","导入结果",result,()->message("导入结果",result));row(group,"import_return","返回滤镜管理","",()->activity(fragment).onBackPressed());return;}
+            if(result!=null){Object group=category(root,"import_result",null,0);row(group,"import_result_details","导入结果",result,()->message("导入结果",result));row(group,"import_return","返回滤镜导入与效果","",()->activity(fragment).onBackPressed());return;}
             Object tools=category(root,"import_tools",null,0);
             row(tools,"pending_import","导入所选滤镜","已选择 "+selected.size()+" 项",()->{
                 if(importBatch==null)return;if(selected.isEmpty()){message("导入滤镜","请至少选择一个滤镜");return;}Set<Integer> ids=new LinkedHashSet<>();for(String id:selected)ids.add(Integer.parseInt(id));runImport(importBatch,ids);
@@ -334,18 +352,23 @@ public final class Laboratory253Hooks {
         }
         boolean resumeImportJob(){
             String id=state(fragment).getString("import_job");if(id==null)return false;ImportJob job=imports.get(id);
-            if(job==null){state(fragment).remove("import_job");if(kind.equals("import")){state(fragment).putString("import_result","上次导入结果无法恢复，请返回滤镜管理查看已导入项目。");render();}else error(new IOException("上次导入结果无法恢复，请查看已导入的滤镜。"));return true;}
+            if(job==null){state(fragment).remove("import_job");if(kind.equals("import")){state(fragment).putString("import_result","上次导入结果无法恢复，请返回查看已导入的滤镜。");render();}else error(new IOException("上次导入结果无法恢复，请查看已导入的滤镜。"));return true;}
             job.page=new WeakReference<>(this);busy=true;if(progressDialog==null)begin(job.title);progress(job.completed,job.total,job.name);finishImportJob(job);return true;
         }
         void completeImportJob(ImportJob job){
             state(fragment).remove("import_job");imports.remove(job.id);end();
             if(job.failure!=null){if(kind.equals("import")){state(fragment).putString("import_result","导入失败："+job.failure.getMessage());render();}error(job.failure);return;}
             if(job.batch!=null){
-                if(job.batch.needsSelection){Bundle args=new Bundle();args.putString(PAGE,"import");args.putString("import_token",job.batch.token);pushPage(fragment,args,"custom_filter_import");}
+                if(job.batch.needsSelection){
+                    Intent intent=pageIntent(fragment,"import").putExtra("import_token",job.batch.token);
+                    if(!launchForResult(intent,IMPORT_SELECTION))io.execute(()->{try{job.batch.close();}catch(IOException failure){Log.e("CameraFilterManager","Import staging cleanup failed",failure);}});
+                }
                 else{Set<Integer> all=new LinkedHashSet<>();for(CustomFilterStore253.ImportItem item:job.batch.items)all.add(item.index);runImport(job.batch,all);}return;
             }
             String summary=job.result.summary();try{store().refresh();}catch(Exception failure){Log.e("CameraFilterManager","Imported filter refresh failed",failure);summary+="\n\n滤镜列表更新失败："+failure.getMessage();}
-            if(kind.equals("import")){state(fragment).putString("import_result",summary);render();message("导入结果",summary);}else{loaded=false;load();message("导入结果",summary);}
+            if(kind.equals("import")){activity(fragment).setResult(Activity.RESULT_OK);state(fragment).putString("import_result",summary);render();}
+            else importRefresh.accept(activity(fragment));
+            message("导入结果",summary);
         }
         void discardImport(){String token=state(fragment).getString("import_token");if(token!=null)io.execute(()->{try{store().discard(token);}catch(IOException failure){Log.e("CameraFilterManager","Import staging cleanup failed",failure);}});
         }

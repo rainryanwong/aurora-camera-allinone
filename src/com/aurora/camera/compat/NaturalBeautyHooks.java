@@ -1,11 +1,11 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
 
 /** Rear photo and AI capture share the native capture beauty scene schema. */
 public final class NaturalBeautyHooks {
@@ -38,7 +38,7 @@ public final class NaturalBeautyHooks {
             @Override public String id() { return "natural-beauty"; }
 
             @Override public void install() {
-                XposedBridge.hookMethod(parser, new StrictHook() {
+                HookDiagnostics.hookMethod(parser, new StrictHook() {
                     @Override protected void before(MethodHookParam param)
                             throws Throwable {
                         int mode = currentMode.getInt(param.thisObject);

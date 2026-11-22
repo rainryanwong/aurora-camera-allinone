@@ -1,6 +1,7 @@
 package com.aurora.camera.compat;
 
-import de.robv.android.xposed.XposedBridge;
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
@@ -20,7 +21,7 @@ public final class NightPaletteRenderHooks {
         return new HookPlan(){
             public String id(){return "214.night-native-filter-renderers";}
             public void install(){
-                XposedBridge.hookMethod(create,new StrictHook(){
+                HookDiagnostics.hookMethod(create,new StrictHook(){
                     @Override protected void after(MethodHookParam p)throws Throwable{
                         if(p.hasThrowable()||mode.getInt(p.thisObject)!=173)return;
                         Object owner=callback.get(p.thisObject);
@@ -34,7 +35,7 @@ public final class NightPaletteRenderHooks {
                         if((Boolean)supported.invoke(null))add.invoke(render,pictureStyle.get(null));
                     }
                 });
-                XposedBridge.hookMethod(destroy,new StrictHook(){
+                HookDiagnostics.hookMethod(destroy,new StrictHook(){
                     @Override protected void after(MethodHookParam p)throws Throwable{
                         if(p.hasThrowable()||mode.getInt(p.thisObject)!=173)return;
                         // Native CaptureModule removes P unconditionally: global

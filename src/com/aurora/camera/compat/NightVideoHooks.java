@@ -1,5 +1,7 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -7,8 +9,6 @@ import android.view.View;
 import android.widget.Toast;
 import android.content.Context;
 import com.aurora.camera.compat.nightvideo.NightVideoBridge;
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -26,7 +26,7 @@ public final class NightVideoHooks {
         return new HookPlan() {
             @Override public String id() { return "night-video"; }
             @Override public void install() {
-                XposedBridge.hookMethod(access.switchVideo, new StrictHook() {
+                HookDiagnostics.hookMethod(access.switchVideo, new StrictHook() {
                     @Override protected void before(MethodHookParam param) {
                         if ((Integer) read(access.fragmentMode, param.thisObject) == 173) {
                             bridge.open(call(access.context, param.thisObject));
@@ -34,27 +34,27 @@ public final class NightVideoHooks {
                         }
                     }
                 });
-                XposedBridge.hookMethod(access.createStart, new StrictHook() {
+                HookDiagnostics.hookMethod(access.createStart, new StrictHook() {
                     @Override protected void before(MethodHookParam param) {
                         bridge.target((Integer) param.args[0]);
                     }
                 });
-                XposedBridge.hookMethod(access.sessionSuccess, new StrictHook() {
+                HookDiagnostics.hookMethod(access.sessionSuccess, new StrictHook() {
                     @Override protected void after(MethodHookParam param) {
                         if (!param.hasThrowable()) bridge.ready(param.thisObject);
                     }
                 });
-                XposedBridge.hookMethod(access.sessionFailed, new StrictHook() {
+                HookDiagnostics.hookMethod(access.sessionFailed, new StrictHook() {
                     @Override protected void after(MethodHookParam param) {
                         if (!param.hasThrowable()) bridge.failed(param.thisObject);
                     }
                 });
-                XposedBridge.hookMethod(access.inactive, new StrictHook() {
+                HookDiagnostics.hookMethod(access.inactive, new StrictHook() {
                     @Override protected void before(MethodHookParam param) {
                         bridge.failed(param.thisObject);
                     }
                 });
-                XposedBridge.hookMethod(access.restoreMode, new StrictHook() {
+                HookDiagnostics.hookMethod(access.restoreMode, new StrictHook() {
                     @Override protected void before(MethodHookParam param) {
                         if ((Integer) param.args[0] != 173) return;
                         Object prefs = call(access.globalPreferences, null);
@@ -81,7 +81,7 @@ public final class NightVideoHooks {
         final Method controllerMode, enableNight, modeSource, modeLookup, selectMode;
         final Method runningPreferences, globalPreferences, component, empty, blockedA0, blockedXZ, alreadyNight;
         final Method sessionSuccess, sessionFailed, inactive, restoreMode, readBoolean, edit, writeBoolean, commit;
-        final Method keepNightPhoto, registeredEntry;
+        final Method keepNightPhoto, registeredEntry, modeSelector, updateSelection;
         final Handler main = new Handler(Looper.getMainLooper());
 
         Access(Host host) throws ReflectiveOperationException {
@@ -133,6 +133,8 @@ public final class NightVideoHooks {
             commit = method(host,preferences.getName(),"c",void.class,false);
             keepNightPhoto = method(host,"K2.m","b",boolean.class,true);
             registeredEntry = method(host,"t3.a","c",host.type("com.android.camera.module.entry.a"),true,int.class);
+            modeSelector = method(host,"R6.I0","a",Optional.class,true);
+            updateSelection = method(host,"R6.I0","O8",void.class,false,int.class);
         }
 
         @Override public boolean cameraContext(Object context) { return camera.isInstance(context); }
@@ -144,6 +146,7 @@ public final class NightVideoHooks {
             call(blur,control,true);
             call(viewConfig,control,2);
             call(switchMode,context,control);
+            ((Optional<?>) call(modeSelector,null)).ifPresent(selector -> call(updateSelection,selector,162));
         }
         @Override public boolean current(Object module) {
             if ((Integer) call(moduleIndex,module) != 162) return false;

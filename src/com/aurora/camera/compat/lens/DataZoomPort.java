@@ -1,8 +1,8 @@
 package com.aurora.camera.compat.lens;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import com.aurora.camera.compat.Host;
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -47,7 +47,7 @@ public final class DataZoomPort {
     }
 
     public void install() {
-        XposedBridge.hookMethod(outer,new LensHook() {
+        HookDiagnostics.hookMethod(outer,new LensHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 p.setObjectExtra(PREVIOUS,active.get()); active.set((int)p.args[0]);
                 if ((int)p.args[0]==175) p.setResult(highPixel((boolean)p.args[1]));
@@ -57,7 +57,7 @@ public final class DataZoomPort {
                 if (previous==null) active.remove(); else active.set(previous);
             }
         });
-        XposedBridge.hookMethod(source,new LensHook() {
+        HookDiagnostics.hookMethod(source,new LensHook() {
             @Override protected void after(MethodHookParam p) throws Throwable {
                 if (!p.hasThrowable() && Integer.valueOf(173).equals(active.get()) && (int)p.args[0]==173 && caller.matches(source,outer))
                     p.setResult(LensRules.nightTwo(173,(float[])p.getResult(),(boolean)front.invoke(running.invoke(null))));

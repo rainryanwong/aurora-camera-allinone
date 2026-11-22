@@ -1,5 +1,7 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.hardware.camera2.CaptureRequest;
 import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Field;
@@ -81,12 +83,12 @@ public final class Metering253Hooks {
             }
 
             public void install() {
-                XposedBridge.hookMethod(support, new StrictHook() {
+                HookDiagnostics.hookMethod(support, new StrictHook() {
                     @Override protected void before(MethodHookParam p) {
                         if (extended((Integer) p.args[0])) p.setResult(true);
                     }
                 });
-                XposedBridge.hookMethod(selected, new StrictHook() {
+                HookDiagnostics.hookMethod(selected, new StrictHook() {
                     @Override protected void before(MethodHookParam p) throws Throwable {
                         int mode = currentMode();
                         if (!extended(mode)) return;
@@ -94,7 +96,7 @@ public final class Metering253Hooks {
                         if (ready(meter)) p.setResult(Integer.parseInt((String) value.invoke(meter, mode)));
                     }
                 });
-                XposedBridge.hookMethod(nativeRequest, new StrictHook() {
+                HookDiagnostics.hookMethod(nativeRequest, new StrictHook() {
                     @Override protected void before(MethodHookParam p) throws Throwable {
                         int mode = requestMode.getInt(p.args[1]);
                         if (!extended(mode)) return;
@@ -105,7 +107,7 @@ public final class Metering253Hooks {
                 });
                 // Native N1 preview always calls X. D1 already includes the ordinary
                 // photo/AI/night/ultra-pixel/street modes, but its group omits Legend.
-                XposedBridge.hookMethod(capture, new StrictHook() {
+                HookDiagnostics.hookMethod(capture, new StrictHook() {
                     @Override protected void after(MethodHookParam p) throws Throwable {
                         if (p.hasThrowable()) return;
                         Object config = configValues.get(cameraConfig.get(p.thisObject));
@@ -113,7 +115,7 @@ public final class Metering253Hooks {
                     }
                 });
                 // O1's native manual-video group omits ordinary video (162).
-                XposedBridge.hookMethod(record, new StrictHook() {
+                HookDiagnostics.hookMethod(record, new StrictHook() {
                     @Override protected void after(MethodHookParam p) throws Throwable {
                         if (p.hasThrowable()) return;
                         Object config = configValues.get(cameraConfig.get(p.thisObject));
@@ -133,8 +135,8 @@ public final class Metering253Hooks {
                 };
                 // Y9.O.b/f both obtain dropdown candidates from l(); the saved first
                 // six slots and the native 214 factory also support dragging it on top.
-                for (Method method : providers) XposedBridge.hookMethod(method, provider);
-                XposedBridge.hookMethod(available, new StrictHook() {
+                for (Method method : providers) HookDiagnostics.hookMethod(method, provider);
+                HookDiagnostics.hookMethod(available, new StrictHook() {
                     @Override protected void before(MethodHookParam p) throws Throwable {
                         int mode = (Integer) p.args[0];
                         if (!extended(mode) || !ready(component())) return;
@@ -148,7 +150,7 @@ public final class Metering253Hooks {
                         }
                     }
                 });
-                XposedBridge.hookMethod(editor, new StrictHook() {
+                HookDiagnostics.hookMethod(editor, new StrictHook() {
                     @Override protected void before(MethodHookParam p) throws Throwable {
                         if (!extended(menuMode.getInt(p.thisObject)) || !ready(component())) return;
                         @SuppressWarnings("unchecked") ArrayList<Integer> previous = (ArrayList<Integer>) p.args[0];
@@ -159,7 +161,7 @@ public final class Metering253Hooks {
                         }
                     }
                 });
-                XposedBridge.hookMethod(aiParameters, new StrictHook() {
+                HookDiagnostics.hookMethod(aiParameters, new StrictHook() {
                     @Override protected void after(MethodHookParam p) throws Throwable {
                         if (p.hasThrowable() || (Integer) p.args[0] != 168) return;
                         // z3.c copies U9.u0's manual components. Exclude metering from

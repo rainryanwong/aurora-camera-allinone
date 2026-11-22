@@ -1,4 +1,8 @@
 package com.aurora.camera.features.watermark;
+
+import com.aurora.camera.diagnostics.ObservedHook;
+
+import com.aurora.camera.diagnostics.HookDiagnostics;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.util.Log;
@@ -19,14 +23,14 @@ final class MetadataHooks {
             Method water=Class.forName("l7.d$a",false,loader).getDeclaredMethod("d");
             if(set.getReturnType()!=void.class || get.getReturnType()!=String.class || image.getReturnType()!=void.class || water.getReturnType()!=void.class)
                 throw new NoSuchMethodException("metadata signatures");
-            XposedBridge.hookMethod(set,new com.aurora.camera.compat.StrictHook() {
+            HookDiagnostics.hookMethod(set,new com.aurora.camera.compat.StrictHook() {
                 @Override protected void before(MethodHookParam p) throws Throwable {
                     if("XiaomiAuxiliaryInfo".equals(p.args[0]) && p.args[1]!=null)
                         p.args[1]=WatermarkLabels.auxiliary((String)p.args[1]);
                 }
             });
-            XposedBridge.hookMethod(image,new XC_MethodHook() {
-                protected void afterHookedMethod(MethodHookParam p) {
+            HookDiagnostics.hookMethod(image,new ObservedHook() {
+                protected void runAfter(MethodHookParam p) {
                     if(p.hasThrowable()) return;
                     try {
                         SharedPreferences prefs=prefs(loader);
@@ -39,8 +43,8 @@ final class MetadataHooks {
                     } catch(Throwable e) { Log.e(TAG,"IMAGE_METADATA_FAILED",e); }
                 }
             });
-            XposedBridge.hookMethod(water,new XC_MethodHook() {
-                protected void afterHookedMethod(MethodHookParam p) {
+            HookDiagnostics.hookMethod(water,new ObservedHook() {
+                protected void runAfter(MethodHookParam p) {
                     if(p.hasThrowable()) return;
                     try {
                         SharedPreferences prefs=prefs(loader); String name=selected(prefs);

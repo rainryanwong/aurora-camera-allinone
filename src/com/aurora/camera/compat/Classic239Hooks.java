@@ -1,5 +1,7 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
@@ -7,6 +9,7 @@ import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.hardware.camera2.CaptureRequest;
+import android.os.Looper;
 import android.util.Log;
 import com.aurora.camera.compat.classic.ClassicCatalog239;
 import com.aurora.camera.compat.classic.ClassicCvHooks240;
@@ -14,7 +17,6 @@ import com.aurora.camera.compat.classic.ClassicPreview241;
 import com.aurora.camera.compat.classic.AsdSummary241;
 import com.aurora.camera.compat.ui.NativePreferences240;
 import com.aurora.camera.compat.ui.NativeNotes249;
-import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -24,15 +26,25 @@ import java.lang.reflect.Proxy;
 import java.nio.FloatBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.zip.ZipFile;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
-/** Phoenix classic scene LUT selection and its Photo-only Xiaomi ASD override. */
+/** Phoenix classic scene LUT selection and the separate Photo-only Xiaomi ASD override. */
 public final class Classic239Hooks {
     private static final String PREFS="aurora_classic239",MODEL="selected_model",ASD="aurora_xiaomi_asd239";
     private static final String PAGE="aurora_classic_page239",ENTRY="aurora_classic_style239";
     private static final String CHOICES="aurora_classic_choices239";
+    private static final String HANDLEFIX_BRIDGE = "com.aurora.camera.compat.handlefix.classic.v1";
+    private static final String STREET_CAPTURE_MODEL = "aurora.classic.streetCaptureModel";
+    private static final int FILTER_RENDER_BIT=1,CV_RENDER_BIT=32;
     private static final String NOTE_TEXT="经过对比，14 Ultra、17 Ultra 与 13 Ultra 的经典风格LUT调色相同，因此只保留 13 Ultra 选项。";
     private Classic239Hooks(){}
     public static HookPlan resolve(final Host h)throws ReflectiveOperationException{
@@ -58,6 +70,9 @@ public final class Classic239Hooks {
         final java.lang.reflect.Field rendererToken=h.field("Tu.h","D"),rendererBitmap=h.field("Tu.h","J"),rendererAttribute=h.field("Tu.h","G");
         final java.lang.reflect.Field attributeToken=h.field("Mu.d","b");
         final Method renderParams=h.method("com.xiaomi.camera.mivi.filter.MIVIRenderTag","initParams");
+        final Method requestParams=h.method("com.xiaomi.camera.mivi.common.MIVITag","getParams");
+        final Method captureBitmaps=h.method("com.xiaomi.camera.mivi.filter.MIVIRenderTag","getLutBitmaps");
+        final java.lang.reflect.Field renderType=h.field("com.xiaomi.camera.mivi.common.MIVITag","mType");
         final java.lang.reflect.Field renderCvId=h.field("com.xiaomi.camera.mivi.filter.MIVIRenderTag","mCvFilterEffectId");
         final java.lang.reflect.Field renderCvDegree=h.field("com.xiaomi.camera.mivi.filter.MIVIRenderTag","mCvFilterDegree");
         final Method asd=h.method("p9.b","b",CaptureRequest.Builder.class,boolean.class);
@@ -68,6 +83,8 @@ public final class Classic239Hooks {
         return new HookPlan(){
             private volatile Boolean latestNativeAsd;
             private final ThreadLocal<Integer> asdMode=new ThreadLocal<>();
+            private final ThreadLocal<String> captureModel=new ThreadLocal<>();
+            private final Set<String> publishedStreetLuts=new HashSet<>();
             private final Set<String> diagnostics=Collections.synchronizedSet(new HashSet<>());
             private String lastAsd;
             private final java.util.concurrent.atomic.AtomicLong previewRevision=new java.util.concurrent.atomic.AtomicLong();
@@ -143,11 +160,60 @@ public final class Classic239Hooks {
                 Object choices=call(fragment,"addSingleChoicePreferenceCategory",screen,CHOICES,ClassicCatalog239.LABELS.clone(),ClassicCatalog239.IDS.clone(),true);
                 XposedHelpers.setObjectField(choices,"p0",model());
                 XposedHelpers.setObjectField(choices,"f",listener(()->{
-                    String selected=(String)XposedHelpers.getObjectField(choices,"p0");ClassicCatalog239.index(selected);
-                    if(!prefs().edit().putString(MODEL,selected).commit())throw new IllegalStateException("无法保存徕卡经典风格");
-                    Log.i("AuroraClassic241","selection_committed model="+selected);
-                    refresh();
+                    selectModel((String)XposedHelpers.getObjectField(choices,"p0"));
                 }));title(fragment);
+            }
+            void selectModel(String selected) {
+                ClassicCatalog239.index(selected);
+                if (!prefs().edit().putString(MODEL, selected).commit()) {
+                    throw new IllegalStateException("无法保存徕卡经典风格");
+                }
+                Log.i("AuroraClassic241", "selection_committed model=" + selected);
+                refresh();
+            }
+
+            boolean classicActive() {
+                return Looper.myLooper() == Looper.getMainLooper() && cvRuntime.classicSelected();
+            }
+
+            Map<String, String> activeClassic() {
+                if (!classicActive()) return null;
+                String selected = model();
+                Map<String, String> result = new HashMap<>();
+                result.put("id", selected);
+                result.put("label", ClassicCatalog239.label(selected));
+                return Collections.unmodifiableMap(result);
+            }
+
+            String cycleClassic(List<String> allowed, HookDiagnostics.Operation operation) {
+                try {
+                    if (!classicActive()) return null;
+                    String current = model();
+                    String next = ClassicCatalog239.next(current, allowed);
+                    if (next == null) return null;
+                    if (!current.equals(next)) selectModel(next);
+                    String actual = model();
+                    if (!next.equals(actual)) return null;
+                    operation.ran();
+                    return ClassicCatalog239.label(actual);
+                } catch (RuntimeException | LinkageError failure) {
+                    operation.failed(failure);
+                    throw failure;
+                }
+            }
+
+            void publishHandleFix() {
+                if (!HookDiagnostics.allHooksRegistered()) return;
+                HookDiagnostics.Operation cycle = HookDiagnostics.operation("HandleFix 徕卡经典配方切换");
+                Map<String, Object> bridge = new HashMap<>();
+                bridge.put("ids", ClassicCatalog239.IDS.clone());
+                bridge.put("labels", ClassicCatalog239.LABELS.clone());
+                bridge.put("version", BuildInfo.VERSION_CODE);
+                bridge.put("modes", ClassicCatalog239.modes());
+                bridge.put("current", (Supplier<Map<String, String>>) this::activeClassic);
+                bridge.put("cycle", (Function<List<String>, String>) allowed -> cycleClassic(allowed, cycle));
+                XposedHelpers.setAdditionalInstanceField(h.loader, HANDLEFIX_BRIDGE, Collections.unmodifiableMap(bridge));
+                cycle.registered();
             }
             byte[] asset(String selected,String scene)throws IOException{
                 String name="assets/classic239/"+selected+"/lut_cvstyle_"+ClassicCatalog239.assetScene(selected,scene)+".png";
@@ -162,7 +228,34 @@ public final class Classic239Hooks {
             Bitmap decode(String selected,String scene,String token)throws Throwable{
                 byte[] bytes=lutBytes(selected,scene);Bitmap result=BitmapFactory.decodeByteArray(bytes,0,bytes.length);
                 if(result==null||result.getWidth()!=512||result.getHeight()!=512){if(result!=null)result.recycle();throw new IOException("Invalid classic LUT "+selected+"/"+scene);}
-                diagnostic("preview_decode","model="+selected+" token="+token+" scene="+scene+" size=512x512 sha256="+sha256(bytes));return result;
+                diagnostic(captureModel.get()==null?"preview_decode":"capture_bitmap_decode",
+                        "model="+selected+" token="+token+" scene="+scene+" size=512x512 sha256="+sha256(bytes));return result;
+            }
+            JSONObject streetRequestParams(JSONObject params,int mask,String selected)throws Exception{
+                if((mask&CV_RENDER_BIT)==0)return params;
+                // initParams appends the ordinary filter (if present) before the CV LUT.
+                int index=(mask&FILTER_RENDER_BIT)==0?0:1;
+                JSONArray names=params.getJSONArray("lutNames");
+                String token=names.getString(index),scene=ClassicCatalog239.scene(token);
+                if(scene==null)return params;
+                String directory=params.getString("lutPath");
+                byte[] bytes=lutBytes(selected,scene);
+                // MIVI consumes a filename, not the camera process's LUT cache entry.
+                String alias="lut_cvstyle_aurora_"+sha256(bytes).substring(0,24);
+                synchronized(publishedStreetLuts){
+                    String key=directory+alias;
+                    if(!publishedStreetLuts.contains(key)){
+                        if(!(Boolean)write.invoke(null,directory,alias+".png",bytes))
+                            throw new IOException("Street CV LUT write rejected: "+directory+alias);
+                        publishedStreetLuts.add(key);
+                    }
+                }
+                JSONObject result=new JSONObject(params.toString());
+                result.getJSONArray("lutNames").put(index,alias);
+                for(String name:new String[]{"cvFilterLutName","cvFilterLookupTableName"})
+                    if(token.equals(result.optString(name)))result.put(name,alias);
+                diagnostic("street_capture_request","model="+selected+" token="+token+" lutPath="+directory+" name="+alias);
+                return result;
             }
             boolean migrateRetiredModel(){
                 SharedPreferences stored=prefs();String previous=stored.getString(MODEL,"native"),selected=ClassicCatalog239.savedModel(previous);
@@ -189,27 +282,30 @@ public final class Classic239Hooks {
                 final java.util.function.Supplier<String> selected=this::model;
                 final java.util.function.IntSupplier currentMode=this::mode;
                 cvRuntime=cvHooks.install(new ClassicCvHooks240.Selection(){public String model(){return selected.get();}public int mode(){return currentMode.getAsInt();}});
-                XposedBridge.hookMethod(settings,new StrictHook(){@Override protected void after(MethodHookParam p){if(!p.hasThrowable())addSettings(p.thisObject);}});
-                XposedBridge.hookMethod(populate,new StrictHook(){@Override protected void before(MethodHookParam p){if(own(p.thisObject)){populate(p.thisObject);p.setResult(null);}}});
-                XposedBridge.hookMethod(register,new StrictHook(){@Override protected void before(MethodHookParam p){if(own(p.thisObject))p.setResult(null);}});
+                HookDiagnostics.hookMethod(settings,new StrictHook(){@Override protected void after(MethodHookParam p){if(!p.hasThrowable())addSettings(p.thisObject);}});
+                HookDiagnostics.hookMethod(populate,new StrictHook(){@Override protected void before(MethodHookParam p){if(own(p.thisObject)){populate(p.thisObject);p.setResult(null);}}});
+                HookDiagnostics.hookMethod(register,new StrictHook(){@Override protected void before(MethodHookParam p){if(own(p.thisObject))p.setResult(null);}});
                 StrictHook titled=new StrictHook(){@Override protected void after(MethodHookParam p){if(!p.hasThrowable()&&own(p.thisObject))title(p.thisObject);}};
-                XposedBridge.hookMethod(initialize,titled);XposedBridge.hookMethod(resume,titled);
-                XposedBridge.hookMethod(resume,new StrictHook(){@Override protected void after(MethodHookParam p){
+                HookDiagnostics.hookMethod(initialize,titled);HookDiagnostics.hookMethod(resume,titled);
+                HookDiagnostics.hookMethod(resume,new StrictHook(){@Override protected void after(MethodHookParam p){
                     if(!p.hasThrowable()&&type("com.android.camera.fragment.settings.CameraAdvancePreferenceFragment").isInstance(p.thisObject)){addSettings(p.thisObject);nativePreferences.regroupLaboratory(p.thisObject);}
                 }});
-                XposedBridge.hookMethod(cameraResume,new StrictHook(){@Override protected void after(MethodHookParam p){
+                HookDiagnostics.hookMethod(cameraResume,new StrictHook(){@Override protected void after(MethodHookParam p){
                     if(!p.hasThrowable()&&p.thisObject.getClass().getName().equals("com.android.camera.Camera")){
                         // Lifecycle runs on the UI thread, including launches into video.
                         if(migrateRetiredModel())return;
-                        if(mode()==163){cvRuntime.sync("camera_resume");refreshPreview("classic_camera_resume");}
+                        cvRuntime.sync("camera_resume");
+                        if(cvRuntime.classicSelected())refreshPreview("classic_camera_resume");
                     }
                 }});
                 StrictHook lut=new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
                     String token=(String)p.args[1],scene=ClassicCatalog239.scene(token);if(scene==null)return;
-                    String selected=model();if(!"native".equals(selected))p.setResult(decode(selected,scene,token));
+                    String selected=captureModel.get();
+                    if(selected==null)selected=model();
+                    if(!"native".equals(selected))p.setResult(decode(selected,scene,token));
                 }};
-                XposedBridge.hookMethod(rawBitmap,lut);XposedBridge.hookMethod(bitmap,lut);
-                XposedBridge.hookMethod(publisher,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
+                HookDiagnostics.hookMethod(rawBitmap,lut);HookDiagnostics.hookMethod(bitmap,lut);
+                HookDiagnostics.hookMethod(publisher,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
                     String token=(String)p.args[1],scene=ClassicCatalog239.scene(token);if(scene==null)return;
                     String selected=model();if("native".equals(selected))return;
                     byte[] bytes=lutBytes(selected,scene);
@@ -224,12 +320,12 @@ public final class Classic239Hooks {
                 // from Tu.h. Its token is unchanged when only the model changes.
                 // Nulling D/J on its GL draw thread makes both native branches
                 // reload through OpenGl3dUtils and recreate CandySDK as needed.
-                XposedBridge.hookMethod(nativeAttach,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
+                HookDiagnostics.hookMethod(nativeAttach,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
                     if(p.hasThrowable())return;
                     // Reattaching Tu.h preserves J/D. Preserve their old model identity as well.
                     diagnostic("renderer_attached","model="+model()+" renderer="+p.thisObject.getClass().getName()+" token="+rendererToken.get(p.thisObject));
                 }});
-                XposedBridge.hookMethod(nativeDraw,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
+                HookDiagnostics.hookMethod(nativeDraw,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
                     if(!nativeClassicRenderer.isInstance(p.thisObject))return;
                     Object attribute=rendererAttribute.get(p.thisObject);if(attribute==null)return;
                     String token=(String)attributeToken.get(attribute);if(ClassicCatalog239.scene(token)==null)return;
@@ -245,10 +341,50 @@ public final class Classic239Hooks {
                         if(selected!=null)preview.completeModel(p.thisObject,(String)selected,!p.hasThrowable());
                     }
                 });
-                XposedBridge.hookMethod(renderParams,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
-                    if(!p.hasThrowable())diagnostic("capture_effect","model="+model()+" cvEffectId="+renderCvId.getInt(p.thisObject)+" degree="+renderCvDegree.getInt(p.thisObject));
+                HookDiagnostics.hookMethod(renderParams,new StrictHook(){
+                    @Override protected void before(MethodHookParam p){
+                        p.setObjectExtra(STREET_CAPTURE_MODEL,captureModel.get());
+                        if(!ClassicCatalog239.isStreetMode(mode()) || !cvRuntime.classicSelected())return;
+                        String selected=model();
+                        if("native".equals(selected))return;
+                        captureModel.set(selected);
+                        XposedHelpers.setAdditionalInstanceField(p.thisObject,STREET_CAPTURE_MODEL,selected);
+                    }
+                    @Override protected void after(MethodHookParam p)throws Throwable{
+                        try{
+                            if(!p.hasThrowable())diagnostic("capture_effect","model="+model()+" cvEffectId="+renderCvId.getInt(p.thisObject)+" degree="+renderCvDegree.getInt(p.thisObject));
+                        }finally{
+                            String previous=(String)p.getObjectExtra(STREET_CAPTURE_MODEL);
+                            if(previous==null)captureModel.remove();else captureModel.set(previous);
+                        }
+                    }
+                });
+                HookDiagnostics.Operation streetDelivery=HookDiagnostics.operation("街拍经典 LUT 成片请求");
+                HookDiagnostics.hookMethod(requestParams,new StrictHook(){@Override protected void after(MethodHookParam p){
+                    if(p.hasThrowable() || !(p.getResult() instanceof JSONObject))return;
+                    String selected=(String)XposedHelpers.getAdditionalInstanceField(p.thisObject,STREET_CAPTURE_MODEL);
+                    if(selected==null)return;
+                    try{
+                        JSONObject params=(JSONObject)p.getResult();
+                        JSONObject routed=streetRequestParams(params,renderType.getInt(p.thisObject),selected);
+                        if(routed!=params){p.setResult(routed);streetDelivery.ran();}
+                    }catch(Exception failure){
+                        streetDelivery.failed(failure);
+                        Log.e("AuroraClassic241","street_capture_request_failed model="+selected,failure);
+                    }
                 }});
-                XposedBridge.hookMethod(draw,new StrictHook(){@Override protected void before(MethodHookParam p){
+                streetDelivery.registered();
+                HookDiagnostics.hookMethod(captureBitmaps,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
+                    if(p.hasThrowable() || !(p.getResult() instanceof List<?>))return;
+                    String selected=(String)XposedHelpers.getAdditionalInstanceField(p.thisObject,STREET_CAPTURE_MODEL);
+                    int mask=renderType.getInt(p.thisObject);
+                    if(selected==null || (mask&CV_RENDER_BIT)==0)return;
+                    int index=(mask&FILTER_RENDER_BIT)==0?0:1;
+                    List<?> bitmaps=(List<?>)p.getResult();
+                    if(index<bitmaps.size() && bitmaps.get(index) instanceof Bitmap)
+                        diagnostic("street_capture_bitmaps","model="+selected+" cvIndex="+index);
+                }});
+                HookDiagnostics.hookMethod(draw,new StrictHook(){@Override protected void before(MethodHookParam p){
                     if(ClassicCatalog239.scene((String)XposedHelpers.getObjectField(p.thisObject,"j"))==null)return;
                     String selected=model();Object previous=XposedHelpers.getAdditionalInstanceField(p.thisObject,"aurora.classic239.model");
                     int texture=(Integer)XposedHelpers.getObjectField(p.thisObject,"p");
@@ -256,7 +392,7 @@ public final class Classic239Hooks {
                     if(previous!=null&&!selected.equals(previous)&&texture>=0)XposedHelpers.callStaticMethod(type("com.xiaomi.gl.MIGL"),"glDeleteTexture",texture,"ClassicStyle239");
                     XposedHelpers.setAdditionalInstanceField(p.thisObject,"aurora.classic239.model",selected);
                 }});
-                XposedBridge.hookMethod(asd,new StrictHook(){
+                HookDiagnostics.hookMethod(asd,new StrictHook(){
                     @Override protected void before(MethodHookParam p){
                         Integer request=asdMode.get();if(request==null)return;
                         p.setObjectExtra("asd240.mode",request);p.setObjectExtra("asd240.input",p.args[1]);
@@ -274,10 +410,11 @@ public final class Classic239Hooks {
                         asdDiagnostic(state,null);
                     }
                 });
-                XposedBridge.hookMethod(asdRequest,new StrictHook(){
+                HookDiagnostics.hookMethod(asdRequest,new StrictHook(){
                     @Override protected void before(MethodHookParam p)throws Throwable{p.setObjectExtra("asd239.mode",asdMode.get());asdMode.set(requestMode.getInt(p.args[2]));}
                     @Override protected void after(MethodHookParam p){Integer previous=(Integer)p.getObjectExtra("asd239.mode");if(previous==null)asdMode.remove();else asdMode.set(previous);}
                 });
+                publishHandleFix();
             }
         };
     }

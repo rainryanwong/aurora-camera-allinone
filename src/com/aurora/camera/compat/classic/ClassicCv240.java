@@ -15,8 +15,8 @@ public final class ClassicCv240 {
     }
     private static final class Owned {
         final Object effect;
-        final int original,forced;
-        Owned(Object effect,int original,int forced){this.effect=effect;this.original=original;this.forced=forced;}
+        final int original,forced,mode;
+        Owned(Object effect,int original,int forced,int mode){this.effect=effect;this.original=original;this.forced=forced;this.mode=mode;}
     }
     private static final class Write {
         final Object effect;
@@ -42,24 +42,39 @@ public final class ClassicCv240 {
         owned.set(null);
     }
 
-    public void sync(String model,int mode,int cvType,String reason){
-        boolean eligible=!"native".equals(model)&&mode==163&&cvType==1;
+    public void sync(String model,int mode,int cvType,String reason,boolean rendererChanged){
+        boolean eligible=!"native".equals(model)&&ClassicCatalog239.supportsMode(mode)&&cvType==1;
         Object effect=state.effect();
         int current=state.current(effect),none=state.none();
         if(eligible&&current==none){
             int common=state.common();
             if(common==none)throw new IllegalStateException("Native classic common mapping is CV NONE");
-            Owned claim=new Owned(effect,none,common);
+            Owned claim=new Owned(effect,none,common,mode);
             write(effect,common,claim);
             state.log("cv_sync reason="+reason+" model="+model+" mode="+mode+" cvType="+cvType+" none="+none+" common="+common+" previous="+current+" current="+state.current(effect)+" owned="+(owned.get()==claim));
             return;
         }
-        if(!eligible){
-            Owned previous=owned.getAndSet(null);
-            if(previous!=null&&previous.effect==effect&&current==previous.forced){
-                write(effect,previous.original,null);
-                state.log("cv_restore reason="+reason+" model="+model+" mode="+mode+" cvType="+cvType+" none="+none+" common="+previous.forced+" previous="+current+" current="+state.current(effect));
-            }
+        if(eligible && rendererChanged){
+            Owned previous=owned.get();
+            Owned claim=previous!=null && previous.effect==effect && previous.forced==current ? previous : null;
+            write(effect,current,claim);
+        }else if(!eligible)restore(owned.get(),effect,current,reason);
+    }
+
+    public void beforeModeChange(int nextMode) {
+        Owned previous = owned.get();
+        if (previous != null && previous.mode != nextMode) {
+            Object effect = state.effect();
+            restore(previous, effect, state.current(effect), "mode_change");
+        }
+    }
+
+    private void restore(Owned previous,Object effect,int current,String reason) {
+        if (previous != null && owned.compareAndSet(previous,null) && previous.effect == effect
+                && current == previous.forced) {
+            write(effect,previous.original,null);
+            state.log("cv_restore reason="+reason+" mode="+previous.mode+" common="+previous.forced
+                    +" previous="+current+" current="+state.current(effect));
         }
     }
     private void write(Object effect,int value,Owned claim){

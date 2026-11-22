@@ -1,11 +1,12 @@
 package com.aurora.camera.compat.ui;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.res.TypedArray;
 import android.view.View;
 import android.widget.TextView;
 import com.aurora.camera.compat.Host;
 import com.aurora.camera.compat.StrictHook;
-import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import java.lang.reflect.Method;
 
@@ -33,7 +34,7 @@ public final class NativeNotes249 {
     public void install(){
         synchronized(NativeNotes249.class){
             if(installed)return;
-            XposedBridge.hookMethod(bind,new StrictHook(){@Override protected void before(MethodHookParam p){prepareNote(p.thisObject,p.args[0]);}@Override protected void after(MethodHookParam p){if(!p.hasThrowable())bindNote(p.thisObject,p.args[0]);}});
+            HookDiagnostics.hookMethod(bind,new StrictHook(){@Override protected void before(MethodHookParam p){prepareNote(p.thisObject,p.args[0]);}@Override protected void after(MethodHookParam p){if(!p.hasThrowable())bindNote(p.thisObject,p.args[0]);}});
             installed=true;
         }
     }

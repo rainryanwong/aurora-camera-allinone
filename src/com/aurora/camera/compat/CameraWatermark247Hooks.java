@@ -1,11 +1,12 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.Context;
 import android.util.Log;
 import com.aurora.camera.compat.editor.Editor245Assets;
 import com.aurora.camera.compat.editor.Editor245TemplateData;
 import com.aurora.camera.compat.watermark.CameraLeica248;
-import de.robv.android.xposed.XposedBridge;
 import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -50,7 +51,7 @@ public final class CameraWatermark247Hooks implements HookPlan {
     }
 
     @Override public void install() {
-        XposedBridge.hookMethod(parse,new StrictHook() {
+        HookDiagnostics.hookMethod(parse,new StrictHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 File root=ownRoot((File)p.args[0]);
                 if (root==null) return;
@@ -74,7 +75,7 @@ public final class CameraWatermark247Hooks implements HookPlan {
                 }
             }
         });
-        XposedBridge.hookMethod(support,new StrictHook() {
+        HookDiagnostics.hookMethod(support,new StrictHook() {
             @Override protected void after(MethodHookParam p) {
                 if (p.hasThrowable() || !photoManager.isInstance(p.thisObject)) return;
                 List<?> original=(List<?>)p.getResult();

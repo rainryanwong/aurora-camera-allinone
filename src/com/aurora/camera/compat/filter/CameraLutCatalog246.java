@@ -30,9 +30,6 @@ public final class CameraLutCatalog246 {
         catch(NumberFormatException invalid){return false;}
     }
     public static List<LutShare246.ExportItem> snapshot(Context context)throws IOException {
-        return snapshot(context,new java.util.HashMap<>());
-    }
-    static List<LutShare246.ExportItem> snapshot(Context context,Map<File,String> revisions)throws IOException {
         Map<String,String> slots=slots(context);
         LutStore229 store=new LutStore229(context);
         ArrayList<LutShare246.ExportItem> out=new ArrayList<>();
@@ -44,18 +41,11 @@ public final class CameraLutCatalog246 {
                 JSONObject item=new JSONObject(raw);String revision=item.getString("revision");
                 File file=new File(root,item.getString("file")).getCanonicalFile();
                 if(!root.equals(file.getParentFile())||!file.isFile())throw new IOException("Imported LUT file missing or outside its private directory: slot="+slot);
-                String actual=revision(file,revisions);
-                if(!actual.equals(revision))throw new IOException("Imported LUT revision does not match PNG: slot="+slot);
-                // Stable slot IDs, content-addressed revisions, and ascending slot order match the camera.
-                out.add(new LutShare246.ExportItem(new LutShare246.Row("import_"+slot,item.getString("name"),actual,out.size()),file));
+                if(!file.getName().equals(revision+".png"))throw new IOException("Imported LUT revision does not match filename: slot="+slot);
+                out.add(new LutShare246.ExportItem(new LutShare246.Row("import_"+slot,item.getString("name"),revision,out.size()),file));
             }
         }catch(org.json.JSONException|IllegalArgumentException invalid){throw new IOException("Invalid imported LUT metadata",invalid);}
         if(!slots.equals(slots(context)))throw new IOException("Imported LUT metadata changed during export");
         return out;
-    }
-    static String revision(File file,Map<File,String> revisions)throws IOException {
-        String value=revisions.get(file);
-        if(value==null){value=LutShare246.sha256(file);revisions.put(file,value);}
-        return value;
     }
 }

@@ -1,18 +1,19 @@
 package com.aurora.camera.compat.lens;
 
-import de.robv.android.xposed.XC_MethodHook;
+import com.aurora.camera.diagnostics.ObservedHook;
+
 import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.InvocationTargetException;
 
 /** Xposed normally swallows callback exceptions; preserve failed native calls. */
-abstract class LensHook extends XC_MethodHook {
+abstract class LensHook extends ObservedHook {
     protected void before(MethodHookParam p) throws Throwable {}
     protected void after(MethodHookParam p) throws Throwable {}
 
-    @Override protected final void beforeHookedMethod(MethodHookParam p) {
+    @Override protected final void runBefore(MethodHookParam p) {
         try { before(p); } catch (Throwable failure) { fail(p,failure); }
     }
-    @Override protected final void afterHookedMethod(MethodHookParam p) {
+    @Override protected final void runAfter(MethodHookParam p) {
         try { after(p); } catch (Throwable failure) { fail(p,failure); }
     }
     private static void fail(MethodHookParam p,Throwable failure) {

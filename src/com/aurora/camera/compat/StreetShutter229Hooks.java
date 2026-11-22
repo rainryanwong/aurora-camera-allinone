@@ -1,10 +1,11 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.Context;
 import android.graphics.drawable.Drawable;
 import android.util.Log;
 import android.view.View;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Collections;
@@ -24,8 +25,8 @@ public final class StreetShutter229Hooks {
         Map<Object,Object> views=Collections.synchronizedMap(new WeakHashMap<>());
         return new HookPlan(){public String id(){return "229.street-shutter-material";}
             public void install(){
-                XposedBridge.hookMethod(setup,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{int current=mode.getInt(p.args[0]);if(!p.hasThrowable()&&(current==229||ShutterStyleHooks.supported(current)))views.put(p.thisObject,p.args[0]);else views.remove(p.thisObject);}});
-                XposedBridge.hookMethod(draw,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
+                HookDiagnostics.hookMethod(setup,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{int current=mode.getInt(p.args[0]);if(!p.hasThrowable()&&(current==229||ShutterStyleHooks.supported(current)))views.put(p.thisObject,p.args[0]);else views.remove(p.thisObject);}});
+                HookDiagnostics.hookMethod(draw,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
                     if(p.hasThrowable()||mode.getInt(p.args[0])!=229)return;String value=(String)selected.invoke(null);
                     if("custom_shutter_default".equals(value))return;
                     // The picker owns the valid preset/custom identities. Use the same
@@ -36,7 +37,7 @@ public final class StreetShutter229Hooks {
                     token.set(target,value);refresh.invoke(target);((Drawable)p.thisObject).invalidateSelf();
                     Log.i("AuroraCameraCompat","street229 shutter material="+value);
                 }});
-                XposedBridge.hookMethod(clicked,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
+                HookDiagnostics.hookMethod(clicked,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
                     if(p.hasThrowable())return;Map<Object,Object> copy; synchronized(views){copy=new java.util.HashMap<>(views);}
                     for(Map.Entry<Object,Object> entry:copy.entrySet()){View view=(View)entry.getKey();if(view.isAttachedToWindow())setup.invoke(view,entry.getValue());}
                 }});

@@ -1,5 +1,9 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.ObservedHook;
+
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.res.Resources;
 import android.graphics.Rect;
 import android.view.View;
@@ -8,8 +12,6 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import com.aurora.camera.compat.style.StyleDebugUi;
 import com.aurora.camera.compat.style.StyleRuntime;
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Method;
 import java.util.List;
 
@@ -42,13 +44,13 @@ public final class StyleHooks {
         AiViewScope(Object owner){this.owner=owner;}
     }
     /** Preserve callback failures as call failures, instead of Xposed logging and resuming. */
-    private abstract static class Hook extends XC_MethodHook {
+    private abstract static class Hook extends ObservedHook {
         void before(MethodHookParam p)throws Throwable {}
         void after(MethodHookParam p)throws Throwable {}
-        @Override protected final void beforeHookedMethod(MethodHookParam p){
+        @Override protected final void runBefore(MethodHookParam p){
             try{before(p);}catch(Throwable failure){p.setThrowable(failure);}
         }
-        @Override protected final void afterHookedMethod(MethodHookParam p){
+        @Override protected final void runAfter(MethodHookParam p){
             try{after(p);}catch(Throwable failure){p.setThrowable(failure);}
         }
     }
@@ -64,14 +66,14 @@ public final class StyleHooks {
         return new HookPlan(){
             @Override public String id(){return "natural-style-and-ai-debug";}
             @Override public void install(){
-                XposedBridge.hookMethod(r.method("cap.resources"),new Hook(){
+                HookDiagnostics.hookMethod(r.method("cap.resources"),new Hook(){
                     @Override void after(MethodHookParam p)throws Throwable{
                         ResourceScope scope=resources.get();
                         if(p.hasThrowable()||scope==null||scope.cap!=p.args[0])return;
                         if(scope.force||(scope.fallback&&!(Boolean)p.getResult()&&r.bool("style.supported",r.style())))p.setResult(true);
                     }
                 });
-                XposedBridge.hookMethod(r.method("style.init"),new Hook(){
+                HookDiagnostics.hookMethod(r.method("style.init"),new Hook(){
                     @Override void before(MethodHookParam p)throws Throwable{
                         Object component=p.thisObject,input=p.args[0];
                         int old=r.integer("mode",component),next=r.integer("input.mode",input);
@@ -107,7 +109,7 @@ public final class StyleHooks {
                     }
                 });
                 for(String key:new String[]{"style.o","style.p","style.r"}){
-                    XposedBridge.hookMethod(r.method(key),new Hook(){
+                    HookDiagnostics.hookMethod(r.method(key),new Hook(){
                         @Override void before(MethodHookParam p)throws Throwable{
                             p.setObjectExtra(PREVIOUS,resources.get());p.setObjectExtra(PREVIOUS+".entered",true);
                             resources.set(new ResourceScope(r.get("cap",p.thisObject),false,true));
@@ -117,7 +119,7 @@ public final class StyleHooks {
                 }
                 // This original value-190 factory chooses animation j or drawable c.
                 // Natural has no animation; its outer branch must agree with style.o.
-                XposedBridge.hookMethod(r.method("editor.item"),new Hook(){
+                HookDiagnostics.hookMethod(r.method("editor.item"),new Hook(){
                     @Override void before(MethodHookParam p)throws Throwable{
                         Object owner=p.args[0],component=p.args[2];
                         if(owner==null||component==null)return;
@@ -129,7 +131,7 @@ public final class StyleHooks {
                     }
                     @Override void after(MethodHookParam p){if(Boolean.TRUE.equals(p.getObjectExtra(PREVIOUS+".entered")))restore(resources,(ResourceScope)p.getObjectExtra(PREVIOUS));}
                 });
-                XposedBridge.hookMethod(r.method("style.value"),new Hook(){
+                HookDiagnostics.hookMethod(r.method("style.value"),new Hook(){
                     @Override void after(MethodHookParam p)throws Throwable{
                         if(p.hasThrowable()||!"2".equals(p.getResult()))return;
                         int mode=r.integer("mode",p.thisObject);
@@ -142,7 +144,7 @@ public final class StyleHooks {
                         }else if(mode==167&&(r.bool("raw",null,mode)||r.bool("ultraRaw",null,mode,r.get("cap",p.thisObject))))p.setResult("0");
                     }
                 });
-                XposedBridge.hookMethod(r.method("preview"),new Hook(){
+                HookDiagnostics.hookMethod(r.method("preview"),new Hook(){
                     @Override void before(MethodHookParam p)throws Throwable{
                         Object state=r.get("preview.state",p.thisObject);
                         if(state==null||r.integer("preview.front",state)!=0)return;
@@ -150,19 +152,19 @@ public final class StyleHooks {
                         if((mode==163||mode==167||mode==225||mode==229||mode==168)&&r.bool("style.active",r.style(),mode))p.setResult(0);
                     }
                 });
-                XposedBridge.hookMethod(r.method("settings.add"),new Hook(){
+                HookDiagnostics.hookMethod(r.method("settings.add"),new Hook(){
                     @Override void after(MethodHookParam p)throws Throwable{if(!p.hasThrowable())addSetting(r,p.thisObject);}
                 });
-                XposedBridge.hookMethod(r.method("menu.enabled"),new Hook(){
+                HookDiagnostics.hookMethod(r.method("menu.enabled"),new Hook(){
                     @Override void before(MethodHookParam p)throws Throwable{
                         boolean eligible=r.debug()||r.bool("screen.S",null)||r.bool("screen.U",null);
                         p.setResult(eligible&&!r.bool("device.special",null)&&(Integer)p.args[0]==168);
                     }
                 });
-                XposedBridge.hookMethod(r.method("debug.b"),new Hook(){@Override void before(MethodHookParam p)throws Throwable{p.setResult(debugUi.tokens());}});
-                XposedBridge.hookMethod(r.method("debug.e"),new Hook(){@Override void before(MethodHookParam p)throws Throwable{p.setResult(debugUi.quickMenu(p.thisObject));}});
-                XposedBridge.hookMethod(r.method("debug.f"),new Hook(){@Override void before(MethodHookParam p)throws Throwable{p.setResult(debugUi.topMenu(p.thisObject));}});
-                XposedBridge.hookMethod(r.method("debug.h"),new Hook(){
+                HookDiagnostics.hookMethod(r.method("debug.b"),new Hook(){@Override void before(MethodHookParam p)throws Throwable{p.setResult(debugUi.tokens());}});
+                HookDiagnostics.hookMethod(r.method("debug.e"),new Hook(){@Override void before(MethodHookParam p)throws Throwable{p.setResult(debugUi.quickMenu(p.thisObject));}});
+                HookDiagnostics.hookMethod(r.method("debug.f"),new Hook(){@Override void before(MethodHookParam p)throws Throwable{p.setResult(debugUi.topMenu(p.thisObject));}});
+                HookDiagnostics.hookMethod(r.method("debug.h"),new Hook(){
                     @Override void before(MethodHookParam p)throws Throwable{
                         android.util.SparseArray<?> map=(android.util.SparseArray<?>)r.get("menu.map",p.thisObject);
                         p.setObjectExtra(PREVIOUS+".protocol6",map.indexOfKey(6)>=0);
@@ -171,18 +173,18 @@ public final class StyleHooks {
                         if(!p.hasThrowable())debugUi.adjustProtocolMap(p.thisObject,(Boolean)p.getObjectExtra(PREVIOUS+".protocol6"));
                     }
                 });
-                XposedBridge.hookMethod(r.method("debug.l"),new Hook(){
+                HookDiagnostics.hookMethod(r.method("debug.l"),new Hook(){
                     @Override void before(MethodHookParam p)throws Throwable{if(p.thisObject.getClass()==r.type("z3.d"))p.setResult(debugUi.extraMenu());}
                 });
-                XposedBridge.hookMethod(r.method("ai.se"),new Hook(){@Override void before(MethodHookParam p)throws Throwable{layoutSe(r,p.thisObject,(Boolean)p.args[0]);p.setResult(null);}});
-                XposedBridge.hookMethod(r.method("ai.st"),new Hook(){@Override void before(MethodHookParam p)throws Throwable{layoutSt(r,p.thisObject,(Boolean)p.args[0],(Boolean)p.args[1]);p.setResult(null);}});
-                XposedBridge.hookMethod(r.method("ai.ks"),new Hook(){
+                HookDiagnostics.hookMethod(r.method("ai.se"),new Hook(){@Override void before(MethodHookParam p)throws Throwable{layoutSe(r,p.thisObject,(Boolean)p.args[0]);p.setResult(null);}});
+                HookDiagnostics.hookMethod(r.method("ai.st"),new Hook(){@Override void before(MethodHookParam p)throws Throwable{layoutSt(r,p.thisObject,(Boolean)p.args[0],(Boolean)p.args[1]);p.setResult(null);}});
+                HookDiagnostics.hookMethod(r.method("ai.ks"),new Hook(){
                     @Override void before(MethodHookParam p)throws Throwable{
                         Object owner=aiLayout.get();
                         if(owner!=null&&r.integer("fragment.mode",owner)==168&&r.debug())p.setResult(true);
                     }
                 });
-                XposedBridge.hookMethod(r.method("ai.view"),new Hook(){
+                HookDiagnostics.hookMethod(r.method("ai.view"),new Hook(){
                     @Override void before(MethodHookParam p)throws Throwable{
                         p.setObjectExtra(PREVIOUS,aiView.get());
                         p.setObjectExtra(PREVIOUS+".layout",aiLayout.get());
@@ -198,11 +200,11 @@ public final class StyleHooks {
                         restore(aiLayout,p.getObjectExtra(PREVIOUS+".layout"));
                     }
                 });
-                XposedBridge.hookMethod(r.method("ai.panel"),new Hook(){
+                HookDiagnostics.hookMethod(r.method("ai.panel"),new Hook(){
                     @Override void before(MethodHookParam p){p.setObjectExtra(PREVIOUS,aiLayout.get());aiLayout.set(p.args[0]);}
                     @Override void after(MethodHookParam p){restore(aiLayout,p.getObjectExtra(PREVIOUS));}
                 });
-                XposedBridge.hookMethod(r.method("view.layout"),new Hook(){
+                HookDiagnostics.hookMethod(r.method("view.layout"),new Hook(){
                     @Override void before(MethodHookParam p)throws Throwable{
                         AiViewScope scope=aiView.get();
                         if(scope==null||scope.consumed||r.get("ai.g",scope.owner)!=p.thisObject
@@ -220,7 +222,7 @@ public final class StyleHooks {
                         else layout.bottomMargin=enabled?(int)(z*2.7f):z;
                     }
                 });
-                XposedBridge.hookMethod(r.method("style.view"),new Hook(){
+                HookDiagnostics.hookMethod(r.method("style.view"),new Hook(){
                     @Override void before(MethodHookParam p){
                         p.setObjectExtra(PREVIOUS,title.get());p.setObjectExtra(PREVIOUS+".entered",true);
                         // Stock initView initializes b itself. It is null on first entry.
@@ -228,7 +230,7 @@ public final class StyleHooks {
                     }
                     @Override void after(MethodHookParam p){if(Boolean.TRUE.equals(p.getObjectExtra(PREVIOUS+".entered")))restore(title,(TitleScope)p.getObjectExtra(PREVIOUS));}
                 });
-                XposedBridge.hookMethod(r.method("style.icon"),new Hook(){
+                HookDiagnostics.hookMethod(r.method("style.icon"),new Hook(){
                     @Override void after(MethodHookParam p)throws Throwable{
                         TitleScope scope=title.get();DropdownScope menu=dropdown.get();
                         if(scope!=null)scope.pendingTitle=null;
@@ -242,7 +244,7 @@ public final class StyleHooks {
                         if(menu!=null)menu.pendingTitle=naturalTitle(r,menu.component,mode);
                     }
                 });
-                XposedBridge.hookMethod(r.method("fragment.string"),new Hook(){
+                HookDiagnostics.hookMethod(r.method("fragment.string"),new Hook(){
                     @Override void before(MethodHookParam p){
                         TitleScope scope=title.get();
                         if(scope!=null&&scope.fragment==p.thisObject&&(Integer)p.args[0]==-1
@@ -252,7 +254,7 @@ public final class StyleHooks {
                         }
                     }
                 });
-                XposedBridge.hookMethod(r.method("dropdown.bind"),new Hook(){
+                HookDiagnostics.hookMethod(r.method("dropdown.bind"),new Hook(){
                     @Override void before(MethodHookParam p)throws Throwable{
                         if(r.integer("dropdown.kind",p.thisObject)!=4||!r.type("r2.m").isInstance(p.args[0]))return;
                         Object owner=r.get("dropdown.owner",p.thisObject);
@@ -262,7 +264,7 @@ public final class StyleHooks {
                     }
                     @Override void after(MethodHookParam p){if(Boolean.TRUE.equals(p.getObjectExtra(PREVIOUS+".entered")))restore(dropdown,(DropdownScope)p.getObjectExtra(PREVIOUS));}
                 });
-                XposedBridge.hookMethod(r.method("context.string"),new Hook(){
+                HookDiagnostics.hookMethod(r.method("context.string"),new Hook(){
                     @Override void before(MethodHookParam p){
                         DropdownScope scope=dropdown.get();
                         if(scope!=null&&scope.context==p.thisObject&&(Integer)p.args[0]==-1&&scope.pendingTitle!=null){

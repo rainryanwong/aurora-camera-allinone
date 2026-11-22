@@ -1,9 +1,10 @@
 package com.aurora.camera.compat.editor;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.util.Log;
 import com.aurora.camera.compat.Host;
 import com.aurora.camera.compat.StrictHook;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Method;
 
 /** Keep the native watermark engine usable inside the editor's LSPosed process. */
@@ -39,8 +40,8 @@ public final class EditorNativeCloud291 {
         StrictHook beforeNative = new StrictHook() {
             @Override protected void before(MethodHookParam p) { prepare(); }
         };
-        XposedBridge.hookMethod(query, beforeNative);
-        XposedBridge.hookMethod(filter, beforeNative);
-        XposedBridge.hookMethod(unwrap, beforeNative);
+        HookDiagnostics.hookMethod(query, beforeNative);
+        HookDiagnostics.hookMethod(filter, beforeNative);
+        HookDiagnostics.hookMethod(unwrap, beforeNative);
     }
 }

@@ -1,5 +1,9 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.ObservedHook;
+
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.CaptureResult;
@@ -10,7 +14,6 @@ import android.os.SystemClock;
 import android.util.Log;
 import com.aurora.camera.compat.trace.TraceWindow222;
 import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -57,7 +60,7 @@ public final class NaturalTrace222Hooks implements HookPlan {
     }
     public String id(){return "222.natural-preview-observer-default-off";}
     private interface Read {void run(XC_MethodHook.MethodHookParam p)throws Exception;}
-    private void hook(Method method,Read read){XposedBridge.hookMethod(method,new XC_MethodHook(){@Override protected void afterHookedMethod(MethodHookParam p){
+    private void hook(Method method,Read read){HookDiagnostics.hookMethod(method,new ObservedHook(){@Override protected void runAfter(MethodHookParam p){
         // A diagnostic failure must not replace the original camera result or exception.
         if(p.hasThrowable()||diagnosticFailed)return;
         try{read.run(p);}catch(Exception failure){diagnosticFailed=true;Log.e(TAG,"222 observer failed; observation stopped, camera result retained",failure);}

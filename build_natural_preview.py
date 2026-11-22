@@ -51,6 +51,35 @@ PHOTO_SCENE_ROUTES = {
 # F1=22 and F1=36 can both reach the same downstream IPE profile in Scene 32.
 PHOTO_SCENE_EFFECTS = {0: 85, 28: 86, 36: 87, 37: 88}
 PHOTO_SCENE_GS = sorted(set().union(*PHOTO_SCENE_ROUTES.values()))
+SCENE4_ROUTES = {
+    filename: {(sensor, 36, 4) for sensor in sensors}
+    for filename, sensors in ROUTE_SENSORS.items()
+}
+SCENE4_GS = set().union(*SCENE4_ROUTES.values())
+SCENE42_SENSORS = {
+    MAIN: (4, 6, 7),
+    'com.qti.tuned.aurora_semco_imx858_ultra.bin': (1,),
+    TELE3: (1,),
+    TELE5: (1, 3),
+}
+SCENE42_EXTRA_ROUTES = ((3, 42, 0, 83), (4, 42, 0, 83), (6, 42, 0, 83))
+CONTINUITY_SCENE_SOURCES = {4: 0, 42: 0, 45: 10}
+CONTINUITY_ROUTES = (
+    (3, 4, 0, 85), (3, 4, 28, 86),
+    *((sensor, 42, 28, 84) for sensor, _, _, _ in SCENE42_EXTRA_ROUTES),
+    *((sensor, 45, source, private)
+      for sensor in sorted({sensor for sensors in SCENE42_SENSORS.values() for sensor in sensors})
+      for source, private in ((0, 83), (28, 84))),
+)
+NIGHT_PREVIEW_PROFILES = ((37, 0), (7, 0), (37, 80))
+NIGHT_PREVIEW_EFFECTS = {0: 89, 28: 90}
+NIGHT_PREVIEW_SENSORS = SCENE42_SENSORS
+CROP_SCENE32_PROFILES = ((22, 0), (7, 0), (22, 80), (36, 80))
+CROP_SCENE32_EFFECT = 91
+CROP_PREVIEW_EFFECTS = {0: CROP_SCENE32_EFFECT, 28: 92}
+CROP_PREVIEW_SENSORS = {**SCENE42_SENSORS, MAIN: (4, 5, 6, 7)}
+# The observed scene values also cover requests that inherit a parent node.
+OBSERVED_PREVIEW_SCENES = (4, 10, 42, 45)
 
 
 def binding(record):
@@ -154,16 +183,21 @@ def scene_appearance(author, name, query, gs_feature):
     return record
 
 
-def bind_preview_queries(current, filename, queries, *, appearance_only=False):
+def bind_preview_queries(current, filename, queries, *, appearance_only=False, preserve=None):
     author = author_lookup(filename)
     names = APPEARANCE if appearance_only else sorted({name for _, name in current.modules})
     additions = {}
     for source, private, gs_feature, use_natural in queries:
         target = (*source[:-1], private)
+        existing_effect = (preserve or {}).get((source[1], source[5], source[6]))
         changes = []
         for name in names:
             existing = current.get_record(name, target)
-            if use_natural and name in APPEARANCE:
+            if existing_effect is not None:
+                record = current.get_record(name, (*source[:-1], existing_effect))
+                if selection(record) != selection(existing):
+                    changes.append((record, record[5]))
+            elif use_natural and name in APPEARANCE:
                 record = scene_appearance(author, name, source, gs_feature)
                 if binding(record) != binding(existing):
                     changes.append((record, None))
@@ -197,6 +231,32 @@ def photo_scene_bindings(current, filename):
     ))
 
 
+def scene4_bindings(current, filename):
+    # The two telephotos and ultrawide share Sensor=1 in GS. Give their
+    # Effect 28 a fresh private route, leaving the existing Scene 4/84 leaf
+    # available for the main camera's Sensor=7.
+    return bind_preview_queries(current, filename, (
+        ((0, sensor, 0, f1, f2, scene, source), private, feature,
+         (sensor, feature, scene) in SCENE4_ROUTES[filename])
+        for sensor, feature, scene in sorted(SCENE4_GS - set(PHOTO_SCENE_GS))
+        for f1, f2 in SKY_PROFILES
+        for source, private in PHOTO_SCENE_EFFECTS.items()
+        if (sensor, source) != (SKY_SENSORS[MAIN], 28)
+    ), preserve={(1, 4, 28): 84} if filename == TELE5 else None)
+
+
+def scene32_ipe_bindings(current, filename):
+    # GS already routes Scene 32 to 76/77. The wide camera has four sensor
+    # modes on these downstream preview profiles.
+    sensors = (4, 5, 6, 7) if filename == MAIN else ROUTE_SENSORS[filename]
+    return bind_preview_queries(current, filename, (
+        ((0, sensor, 0, f1, f2, 32, source), IPE_EFFECTS[source], 36, True)
+        for sensor in sensors
+        for f1, f2 in ((7, 0), (36, 80))
+        for source in (0, 28)
+    ), appearance_only=True)
+
+
 def observed_mode_ipe_bindings(current, filename):
     if filename not in (MAIN, TELE3, TELE5):
         return {}
@@ -211,6 +271,139 @@ def observed_mode_ipe_bindings(current, filename):
         ((0, sensor, 0, f1, f2, scene, 0), 76, gs_feature, True)
         for sensor, f1, f2, scene, gs_feature in profiles
     ), appearance_only=True)
+
+
+def scene42_bindings(current, filename):
+    """Keep each lens's Scene 0 appearance when its original scene changes to 42."""
+    additions = {}
+    names = sorted({name for _, name in current.modules})
+    legacy_sensors = set(SKY_SENSORS.values())
+    sensors = legacy_sensors | {sensor for sensor, _, _, _ in SCENE42_EXTRA_ROUTES}
+    for sensor in sorted(sensors):
+        use_natural = sensor in SCENE42_SENSORS[filename]
+        for feature1, feature2 in SKY_PROFILES:
+            prefix = (0, sensor, 0, feature1, feature2)
+            for source, private in ((0, 83), (28, 84)) if sensor in legacy_sensors else ((0, 83),):
+                if sensor == SKY_SENSORS.get(filename):
+                    continue  # Already uses this lens's matching Scene 0 appearance.
+                target = prefix + (42, private)
+                changes = []
+                for name in names:
+                    query = (prefix + (0, IPE_EFFECTS[source]) if use_natural and name in APPEARANCE
+                             else prefix + (42, source))
+                    record = current.get_record(name, query)
+                    if selection(record) != selection(current.get_record(name, target)):
+                        changes.append((record, record[5]))
+                if changes:
+                    additions[target] = changes
+    return additions
+
+
+def continuity_bindings(current, filename):
+    additions = {}
+    names = sorted({name for _, name in current.modules})
+    for sensor, scene, source, private in CONTINUITY_ROUTES:
+        use_natural = sensor in SCENE42_SENSORS[filename]
+        for feature1, feature2 in SKY_PROFILES:
+            profile = (0, sensor, 0, feature1, feature2)
+            target = profile + (scene, private)
+            natural_query = profile + (CONTINUITY_SCENE_SOURCES[scene], IPE_EFFECTS[source])
+            stock_query = profile + (scene, source)
+            changes = []
+            for name in names:
+                query = natural_query if use_natural and name in APPEARANCE else stock_query
+                record = current.get_record(name, query)
+                if selection(record) != selection(current.get_record(name, target)):
+                    changes.append((record, record[5]))
+            if changes:
+                additions[target] = changes
+    return additions
+
+
+def night_preview_scenes(lookup):
+    return sorted(set(OBSERVED_PREVIEW_SCENES) | {
+        value >> 16
+        for filename in NIGHT_PREVIEW_SENSORS
+        for value in lookup(filename).packed.values()
+        if value & 0xffff == 5
+    })
+
+
+def night_preview_bindings(current, filename, scenes):
+    sensors = sorted({sensor for values in NIGHT_PREVIEW_SENSORS.values() for sensor in values})
+    return bind_preview_queries(current, filename, (
+        ((0, sensor, 0, f1, f2, scene, source), effect, 37,
+         sensor in NIGHT_PREVIEW_SENSORS[filename])
+        for sensor in sensors
+        for f1, f2 in NIGHT_PREVIEW_PROFILES
+        for scene in scenes
+        for source, effect in NIGHT_PREVIEW_EFFECTS.items()
+    ))
+
+
+def crop_scene32_bindings(current, filename):
+    names = sorted({name for _, name in current.modules})
+    sensors = sorted(set().union(*SCENE42_SENSORS.values()))
+    additions = {}
+    for sensor in sensors:
+        for f1, f2 in CROP_SCENE32_PROFILES:
+            prefix = (0, sensor, 0, f1, f2)
+            source = (*prefix, 32, 0)
+            target = (*prefix, 32, CROP_SCENE32_EFFECT)
+            changes = []
+            for name in names:
+                query = source
+                if name in APPEARANCE and sensor in SCENE42_SENSORS[filename]:
+                    if filename == TELE5 and sensor == 1:
+                        # Keep the existing 5x Scene 32 appearance in its native sensor mode.
+                        query = (*prefix, 32, PHOTO_SCENE_EFFECTS[0])
+                    elif binding(current.get_record(name, (*prefix, 0, IPE_EFFECTS[0]))) != binding(
+                            current.get_record(name, (*prefix, 0, 0))):
+                        # A cropped stream inheriting Scene 0 keeps its current appearance.
+                        query = (*prefix, 0, IPE_EFFECTS[0])
+                record = current.get_record(name, query)
+                if selection(record) != selection(current.get_record(name, target)):
+                    changes.append((record, record[5]))
+            if changes:
+                additions[target] = changes
+    return additions
+
+
+def crop_preview_bindings(current, filename, scenes):
+    names = sorted({name for _, name in current.modules})
+    sensors = sorted(set().union(*CROP_PREVIEW_SENSORS.values()))
+    additions = {}
+    for sensor in sensors:
+        for f1, f2 in CROP_SCENE32_PROFILES:
+            prefix = (0, sensor, 0, f1, f2)
+            for scene in scenes:
+                for source, effect in CROP_PREVIEW_EFFECTS.items():
+                    if scene == 32 and source == 0 and sensor != 5:
+                        continue  # Already authored for Effect 91 in 2.0.96.
+                    source_query = (*prefix, scene, source)
+                    target = (*prefix, scene, effect)
+                    changes = []
+                    for name in names:
+                        record = current.get_record(name, source_query)
+                        if name in APPEARANCE and sensor in CROP_PREVIEW_SENSORS[filename]:
+                            if scene == 32 and filename == TELE5 and sensor == 1:
+                                record = current.get_record(name, (*prefix, scene, PHOTO_SCENE_EFFECTS[source]))
+                            else:
+                                natural = IPE_EFFECTS[source]
+                                existing = current.get_record(name, (*prefix, scene, natural))
+                                if scene in (40, 46) and binding(existing) != binding(record):
+                                    # These GS routes already selected the public Natural Effect.
+                                    record = existing
+                                else:
+                                    neutral = current.get_record(name, (*prefix, 0, source))
+                                    reference = current.get_record(name, (*prefix, 0, natural))
+                                    if binding(reference) != binding(neutral):
+                                        record = reference
+                        if selection(record) != selection(current.get_record(name, target)):
+                            changes.append((record, record[5]))
+                    if changes:
+                        additions[target] = changes
+    return additions
 
 
 def tuned_payload(blob, filename, *, bind=preview_bindings):
@@ -250,7 +443,8 @@ def tuned_payload(blob, filename, *, bind=preview_bindings):
     return body + struct.pack('<I', zlib.crc32(body))
 
 
-def gs_payload(blob, *, build=BUILD, sky_scenes=False, photo_scenes=False):
+def gs_payload(blob, *, build=BUILD, sky_scenes=False, photo_scenes=False, scene4=False,
+               extra_sky_routes=(), night_scenes=(), crop_scene32=False, crop_scenes=()):
     image = ELFFile(io.BytesIO(blob))
     index, segment = next((index, segment) for index, segment in enumerate(image.iter_segments())
                           if segment['p_type'] == 'PT_LOAD' and segment['p_flags'] == 5)
@@ -262,16 +456,37 @@ def gs_payload(blob, *, build=BUILD, sky_scenes=False, photo_scenes=False):
                 for sensor, feature1, scene in GS_ROUTES) + '    .byte 255\n', encoding='utf-8')
     flags = []
     if sky_scenes:
+        routes = [(sensor, scene, source, private)
+                  for sensor in sorted(SKY_SENSORS.values())
+                  for scene, source, private in SKY_EFFECTS
+                  if not (scene4 and scene == 4 and sensor != SKY_SENSORS[MAIN])]
         (build / 'sky_preview_routes.inc').write_text(
             ''.join(f'    .byte {sensor}, {scene}, {source}, {private}\n'
-                    for sensor in sorted(SKY_SENSORS.values())
-                    for scene, source, private in SKY_EFFECTS) + '    .byte 255\n', encoding='utf-8')
+                    for sensor, scene, source, private in (*routes, *extra_sky_routes))
+            + '    .byte 255\n', encoding='utf-8')
         flags.append('-DSKY_PREVIEW')
     if photo_scenes:
+        routes = sorted(set(PHOTO_SCENE_GS) | SCENE4_GS) if scene4 else PHOTO_SCENE_GS
         (build / 'photo_scene_routes.inc').write_text(
             ''.join(f'    .byte {sensor}, {feature1}, {scene}\n'
-                    for sensor, feature1, scene in PHOTO_SCENE_GS) + '    .byte 255\n', encoding='utf-8')
+                    for sensor, feature1, scene in routes) + '    .byte 255\n', encoding='utf-8')
         flags.extend(('-DPHOTO_SCENES', f'-DPHOTO_EFFECT={PHOTO_SCENE_EFFECTS[0]}'))
+    if night_scenes:
+        sensors = set().union(*NIGHT_PREVIEW_SENSORS.values())
+        (build / 'night_preview_routes.inc').write_text(
+            f'    .quad {sum(1 << scene for scene in night_scenes):#x}\n'
+            f'    .quad {sum(1 << sensor for sensor in sensors):#x}\n', encoding='utf-8')
+        flags.extend(('-DNIGHT_PREVIEW',
+                      f'-DNIGHT_EFFECT_0={NIGHT_PREVIEW_EFFECTS[0]}',
+                      f'-DNIGHT_EFFECT_28={NIGHT_PREVIEW_EFFECTS[28]}'))
+    if crop_scene32 or crop_scenes:
+        sensor_map = CROP_PREVIEW_SENSORS if crop_scenes else SCENE42_SENSORS
+        sensors = set().union(*sensor_map.values())
+        flags.extend(('-DCROP_SCENE32_PREVIEW', f'-DCROP_SCENE32_EFFECT={CROP_SCENE32_EFFECT}',
+                      f'-DCROP_SCENE32_SENSORS={sum(1 << sensor for sensor in sensors):#x}'))
+    if crop_scenes:
+        flags.extend((f'-DCROP_PREVIEW_SCENES={sum(1 << scene for scene in crop_scenes):#x}',
+                      f'-DCROP_EFFECT_28={CROP_PREVIEW_EFFECTS[28]}'))
     subprocess.run([str(NDK / 'clang.exe'), '--target=aarch64-linux-android29', '-c',
                     '-I', str(build), *flags,
                     f'-DPREVIEW_EFFECT={EFFECTS[36]}',

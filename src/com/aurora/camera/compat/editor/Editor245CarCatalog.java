@@ -1,9 +1,10 @@
 package com.aurora.camera.compat.editor;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.util.Log;
 import com.aurora.camera.compat.Host;
 import com.aurora.camera.compat.StrictHook;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.*;
 import java.util.*;
 
@@ -28,10 +29,10 @@ public final class Editor245CarCatalog {
         }
     }
     public void install() {
-        for (Method gate : gates) XposedBridge.hookMethod(gate, new StrictHook() {
+        for (Method gate : gates) HookDiagnostics.hookMethod(gate, new StrictHook() {
             @Override protected void before(MethodHookParam p) { if (Boolean.TRUE.equals(discovering.get())) p.setResult(true); }
         });
-        XposedBridge.hookMethod(catalog, new StrictHook() {
+        HookDiagnostics.hookMethod(catalog, new StrictHook() {
             @Override protected void after(MethodHookParam p) throws Throwable {
                 if (p.hasThrowable() || Boolean.TRUE.equals(discovering.get())) return;
                 discovering.set(true);

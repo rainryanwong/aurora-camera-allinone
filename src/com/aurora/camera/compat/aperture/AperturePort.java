@@ -1,5 +1,8 @@
 package com.aurora.camera.compat.aperture;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+import com.aurora.camera.diagnostics.ObservedHook;
+
 import com.aurora.camera.compat.StrictHook;
 
 import android.content.Context;
@@ -11,8 +14,6 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import com.aurora.camera.compat.Host;
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
 import java.io.File;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -168,14 +169,14 @@ public final class AperturePort {
 
     public void install() {
         aiProfessional.install();
-        XC_MethodHook setupAlias=new StrictHook() {
+        ObservedHook setupAlias=new StrictHook() {
             @Override protected void before(MethodHookParam p) {
                 p.args[0]=ApertureRules.setupMode((Integer)p.args[0]);
             }
         };
-        XposedBridge.hookMethod(componentSetup,setupAlias);
-        XposedBridge.hookMethod(componentSupport,setupAlias);
-        XposedBridge.hookMethod(activeAperture,new StrictHook(){
+        HookDiagnostics.hookMethod(componentSetup,setupAlias);
+        HookDiagnostics.hookMethod(componentSupport,setupAlias);
+        HookDiagnostics.hookMethod(activeAperture,new StrictHook(){
             @Override protected void before(MethodHookParam p){int mode=(Integer)p.args[0];if(mode==171||mode==175)p.args[0]=163;}
         });
         StrictHook membership239=new StrictHook(){
@@ -184,20 +185,20 @@ public final class AperturePort {
                 if(initializing.get()==owner&&(mode==171||mode==175)&&(Integer)p.args[1]==163)p.setResult(true);
             }
         };
-        XposedBridge.hookMethod(compareManual,membership239);XposedBridge.hookMethod(compareSat,membership239);
-        XposedBridge.hookMethod(componentCheck,new StrictHook() {
+        HookDiagnostics.hookMethod(compareManual,membership239);HookDiagnostics.hookMethod(compareSat,membership239);
+        HookDiagnostics.hookMethod(componentCheck,new StrictHook() {
             @Override protected void before(MethodHookParam p) {
                 p.args[0]=ApertureRules.validationMode((Integer)p.args[0]);
             }
         });
-        XC_MethodHook aiKey=new StrictHook() {
+        ObservedHook aiKey=new StrictHook() {
             @Override protected void before(MethodHookParam p) {
                 if ((Integer)p.args[0]==168) p.setResult("pref_camera_aperture_retain_key_ai");
                 if ((Integer)p.args[0]==173) p.setResult("pref_camera_aperture_retain_key_night");
             }
         };
-        XposedBridge.hookMethod(componentKey,aiKey); XposedBridge.hookMethod(professionalKey,aiKey);
-        XposedBridge.hookMethod(componentInit,new StrictHook() {
+        HookDiagnostics.hookMethod(componentKey,aiKey); HookDiagnostics.hookMethod(professionalKey,aiKey);
+        HookDiagnostics.hookMethod(componentInit,new StrictHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 p.setObjectExtra(EXTRA,initializing.get());
                 p.setObjectExtra(EXTRA+".oldMode",componentMode.getInt(p.thisObject));
@@ -216,7 +217,7 @@ public final class AperturePort {
                 } finally { set(initializing,p.getObjectExtra(EXTRA)); }
             }
         });
-        XC_MethodHook initializationMode=new StrictHook() {
+        ObservedHook initializationMode=new StrictHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 Object target=initializing.get();
                 if (target!=null) {
@@ -225,20 +226,20 @@ public final class AperturePort {
                 }
             }
         };
-        XposedBridge.hookMethod(compareModeA,initializationMode); XposedBridge.hookMethod(compareModeB,initializationMode);
-        XposedBridge.hookMethod(apertureApply,new StrictHook() {
+        HookDiagnostics.hookMethod(compareModeA,initializationMode); HookDiagnostics.hookMethod(compareModeB,initializationMode);
+        HookDiagnostics.hookMethod(apertureApply,new StrictHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 if (initializing.get()==p.thisObject && (componentMode.getInt(p.thisObject)==168||componentMode.getInt(p.thisObject)==173))
                     satSupported.setBoolean(p.thisObject,supported.getBoolean(p.thisObject));
             }
         });
-        XposedBridge.hookMethod(componentTitle,new StrictHook() {
+        HookDiagnostics.hookMethod(componentTitle,new StrictHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 Scope current=scope.get();
                 if (current!=null && current.title && isAi(p.thisObject,mode())) p.setResult(0x7f140d73);
             }
         });
-        XposedBridge.hookMethod(discreteAperture,new StrictHook() {
+        HookDiagnostics.hookMethod(discreteAperture,new StrictHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 Scope current=scope.get();
                 if (current!=null && current.forceDiscrete && isAi(p.thisObject,mode())) p.setResult(true);
@@ -249,18 +250,18 @@ public final class AperturePort {
         // A genuinely discrete capability still keeps its original R4.v path.
         titleScope(createSlider,false,false); titleScope(sliderClick,false,true);
         changeHook(panelChange,false); changeHook(sliderChange,true);
-        XposedBridge.hookMethod(autoRow,new StrictHook() {
+        HookDiagnostics.hookMethod(autoRow,new StrictHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 if (aperture.isInstance(p.args[0])) p.setResult(apertureAuto.invoke(p.args[0]));
             }
         });
-        XposedBridge.hookMethod(createSelectors,new StrictHook() {
+        HookDiagnostics.hookMethod(createSelectors,new StrictHook() {
             @SuppressWarnings("unchecked")
             @Override protected void after(MethodHookParam p) throws Throwable {
                 if (!p.hasThrowable()) addSelector((ArrayList<Object>)p.getResult(),(ViewGroup)p.args[0]);
             }
         });
-        XposedBridge.hookMethod(renderRow,new StrictHook() {
+        HookDiagnostics.hookMethod(renderRow,new StrictHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 // Stock c consumes getDefaultValueDisplayString as a resource
                 // before an after-hook can repair a disabled base-aperture row.
@@ -268,14 +269,14 @@ public final class AperturePort {
                         (Integer)p.args[2],(Integer)p.args[3],mode())) p.setResult(null);
             }
         });
-        XposedBridge.hookMethod(findPanelClickGuard(),new StrictHook() {
+        HookDiagnostics.hookMethod(findPanelClickGuard(),new StrictHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 if (isAi(p.args[0],fragmentMode.getInt(p.thisObject)) && (Boolean)disabled.invoke(p.args[0]))
                     p.setResult(false);
             }
         });
         installReset(); installWorkspace();
-        XposedBridge.hookMethod(managerUpdate,new StrictHook() {
+        HookDiagnostics.hookMethod(managerUpdate,new StrictHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 if (managerMode.getInt(p.thisObject)!=168) return;
                 Object component=managerComponent.get(p.thisObject);
@@ -297,7 +298,7 @@ public final class AperturePort {
     private Method findPanelClickGuard() { return panelClickGuard; }
 
     private void titleScope(Member member,final boolean force,final boolean click) {
-        XposedBridge.hookMethod(member,new StrictHook() {
+        HookDiagnostics.hookMethod(member,new StrictHook() {
             @Override protected void before(MethodHookParam p) {
                 Scope previous=scope.get(); p.setObjectExtra(EXTRA,previous);
                 scope.set(new Scope(true,force || previous!=null && previous.forceDiscrete,
@@ -310,7 +311,7 @@ public final class AperturePort {
     }
 
     private void changeHook(Method method,final boolean slider) {
-        XposedBridge.hookMethod(method,new StrictHook() {
+        HookDiagnostics.hookMethod(method,new StrictHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 Scope previous=scope.get(); p.setObjectExtra(EXTRA,previous);
                 scope.set(new Scope(false,false,previous!=null && previous.programmatic));
@@ -408,7 +409,7 @@ public final class AperturePort {
     }
 
     private void installReset() {
-        XposedBridge.hookMethod(resetState,new StrictHook() {
+        HookDiagnostics.hookMethod(resetState,new StrictHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 if (sixItems(p.thisObject)) { resetForSix(p.thisObject); p.setResult(null); }
             }
@@ -416,19 +417,19 @@ public final class AperturePort {
                 if (!p.hasThrowable()) refresh(p.thisObject);
             }
         });
-        XC_MethodHook update=new StrictHook() {
+        ObservedHook update=new StrictHook() {
             @Override protected void after(MethodHookParam p) throws Throwable {
                 if (!p.hasThrowable()) refresh(p.thisObject);
             }
         };
-        for (Method method:refreshMethods) XposedBridge.hookMethod(method,update);
-        XC_MethodHook release=new StrictHook() {
+        for (Method method:refreshMethods) HookDiagnostics.hookMethod(method,update);
+        ObservedHook release=new StrictHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 if (panel.isInstance(p.thisObject)) ResetMirror.release((View)rootView.get(p.thisObject));
             }
         };
-        for (Method method:releaseMethods) XposedBridge.hookMethod(method,release);
-        XposedBridge.hookMethod(resetParameters,new StrictHook() {
+        for (Method method:releaseMethods) HookDiagnostics.hookMethod(method,release);
+        HookDiagnostics.hookMethod(resetParameters,new StrictHook() {
             @Override protected void before(MethodHookParam p) {
                 p.setObjectExtra(EXTRA,resetting.get()); resetting.set(p.thisObject);
             }
@@ -436,7 +437,7 @@ public final class AperturePort {
                 set(resetting,p.getObjectExtra(EXTRA));
             }
         });
-        XposedBridge.hookMethod(cancelResetAnimation,new StrictHook() {
+        HookDiagnostics.hookMethod(cancelResetAnimation,new StrictHook() {
             @Override protected void after(MethodHookParam p) throws Throwable {
                 Object fragment=resetting.get();
                 if (p.hasThrowable() || fragment==null || resetView.get(fragment)!=p.thisObject
@@ -464,7 +465,7 @@ public final class AperturePort {
     }
 
     private void installWorkspace() {
-        XposedBridge.hookMethod(workspaceRestore,new StrictHook() {
+        HookDiagnostics.hookMethod(workspaceRestore,new StrictHook() {
             @Override protected void before(MethodHookParam p) {
                 p.setObjectExtra(EXTRA,restoringWorkspace.get());
                 restoringWorkspace.set(new WorkspaceCall(p.args[1],(Integer)p.args[0]));
@@ -476,7 +477,7 @@ public final class AperturePort {
                 } finally { set(restoringWorkspace,(WorkspaceCall)p.getObjectExtra(EXTRA)); }
             }
         });
-        XposedBridge.hookMethod(workspaceInit,new StrictHook() {
+        HookDiagnostics.hookMethod(workspaceInit,new StrictHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 p.setObjectExtra(EXTRA,workspaceComponents.get(p.thisObject));
             }

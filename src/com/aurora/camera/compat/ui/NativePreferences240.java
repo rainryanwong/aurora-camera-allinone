@@ -104,9 +104,8 @@ public final class NativePreferences240 {
         Object backup=category(fragment,root,"category_aurora_backup",null,-1997);
         move(root,ai,"pref_aurora_ai_debug_controls",0);
         move(root,ai,"pref_aurora_ai_reset_keep_zoom",1);
-        move(root,ai,com.aurora.camera.compat.SuperTelephotoHooks.THREE_STATES,2);
+        move(root,ai,com.aurora.camera.compat.SuperTelephotoHooks.TOGGLE_OPTIMIZATION,2);
         move(root,ai,com.aurora.camera.compat.SuperTelephotoHooks.ZOOM10,3);
-        move(root,ai,com.aurora.camera.compat.SuperTelephotoHooks.EXTENDED,4);
         move(root,backup,"aurora_settings_backup253",0);
         Object filters=call(root,"k0",FILTER_GROUP);
         move(root,filters,"aurora_custom_filter_manager253",2);

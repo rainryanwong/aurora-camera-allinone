@@ -1,12 +1,13 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.res.AssetManager;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteException;
 import android.util.Log;
-import de.robv.android.xposed.XposedBridge;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
@@ -114,14 +115,14 @@ public final class CameraCloudControls implements HookPlan {
     }
 
     @Override public void install() {
-        XposedBridge.hookMethod(attach, new StrictHook() {
+        HookDiagnostics.hookMethod(attach, new StrictHook() {
             @Override protected void before(MethodHookParam param) {
                 context = (Context) param.args[0];
                 options = context.getSharedPreferences(OPTIONS, Context.MODE_PRIVATE);
                 if (options.getBoolean(PENDING, false)) resetAtStartup();
             }
         });
-        XposedBridge.hookMethod(fetch, new StrictHook() {
+        HookDiagnostics.hookMethod(fetch, new StrictHook() {
             @Override protected void before(MethodHookParam param) throws Throwable {
                 String module = (String) param.args[0];
                 if (!blocked(module)) return;
@@ -130,7 +131,7 @@ public final class CameraCloudControls implements HookPlan {
                 }
             }
         });
-        XposedBridge.hookMethod(acceptResponse, new StrictHook() {
+        HookDiagnostics.hookMethod(acceptResponse, new StrictHook() {
             @Override protected void before(MethodHookParam param) throws Throwable {
                 if (!blocked((String) responseModule.get(param.thisObject))) return;
                 // The stock requester uses HttpError 1 when it skips a refresh.
@@ -138,18 +139,18 @@ public final class CameraCloudControls implements HookPlan {
                 param.setResult(requestResult.newInstance(requestFailure.newInstance(error)));
             }
         });
-        XposedBridge.hookMethod(saveRules, new StrictHook() {
+        HookDiagnostics.hookMethod(saveRules, new StrictHook() {
             @Override protected void before(MethodHookParam param) throws Throwable {
                 if (blocked((String) saveModule.get(param.thisObject))) param.setResult(null);
             }
         });
-        XposedBridge.hookMethod(readMiViFile, new StrictHook() {
+        HookDiagnostics.hookMethod(readMiViFile, new StrictHook() {
             @Override protected void before(MethodHookParam param) {
                 String local = restoredDynamic;
                 if (local != null && DYNAMIC_FILE.equals(param.args[0])) param.setResult(local);
             }
         });
-        XposedBridge.hookMethod(applyMiVi, new StrictHook() {
+        HookDiagnostics.hookMethod(applyMiVi, new StrictHook() {
             @Override protected void before(MethodHookParam param) {
                 param.setObjectExtra(PENDING, restoredDynamic);
             }
@@ -158,7 +159,7 @@ public final class CameraCloudControls implements HookPlan {
                 if (!param.hasThrowable() && param.getObjectExtra(PENDING) != null) restoredDynamic = null;
             }
         });
-        XposedBridge.hookMethod(filterWatermarks, new StrictHook() {
+        HookDiagnostics.hookMethod(filterWatermarks, new StrictHook() {
             @Override protected void before(MethodHookParam param) {
                 if (context == null || !Boolean.TRUE.equals(param.args[0])) return;
                 String name = videoWatermarks.isInstance(param.thisObject) ? "video_watermark_setting" : "watermark_setting";

@@ -1,9 +1,13 @@
 package com.aurora.camera.livemotion;
 
+import com.aurora.camera.diagnostics.ObservedHook;
+
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.media.MediaFormat;
 import android.os.SystemClock;
 import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XC_MethodReplacement;
+import com.aurora.camera.diagnostics.ObservedReplacement;
 import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Field;
 import java.lang.reflect.Constructor;
@@ -52,8 +56,8 @@ final class VideoWindow {
     }
 
     void install() {
-        XposedBridge.hookMethod(record, new XC_MethodHook() {
-            @Override protected void beforeHookedMethod(MethodHookParam p) throws Throwable {
+        HookDiagnostics.hookMethod(record, new ObservedHook() {
+            @Override protected void runBefore(MethodHookParam p) throws Throwable {
                 p.setObjectExtra("Aurora.previousWindowScope", scope.get());
                 scope.remove();
                 if (!captures.owns(p.args[2]) || (Boolean) p.args[7]) return;
@@ -63,13 +67,13 @@ final class VideoWindow {
                 Object encoder = videoEncoder.get(p.thisObject);
                 if (videoClass.isInstance(encoder)) scope.set(new Scope(encoder, p.args[2]));
             }
-            @Override protected void afterHookedMethod(MethodHookParam p) {
+            @Override protected void runAfter(MethodHookParam p) {
                 Scope previous = (Scope) p.getObjectExtra("Aurora.previousWindowScope");
                 if (previous == null) scope.remove(); else scope.set(previous);
             }
         });
-        XposedBridge.hookMethod(baseSnapshot, new XC_MethodHook() {
-            @Override protected void afterHookedMethod(MethodHookParam p) throws Throwable {
+        HookDiagnostics.hookMethod(baseSnapshot, new ObservedHook() {
+            @Override protected void runAfter(MethodHookParam p) throws Throwable {
                 Scope call = scope.get();
                 if (call == null || call.encoder != p.thisObject || p.hasThrowable()
                         || p.getResult() == null) return;
@@ -80,7 +84,7 @@ final class VideoWindow {
                 call.snap = snap.getLong(result);
             }
         });
-        XposedBridge.hookMethod(videoSnapshot, new XC_MethodReplacement() {
+        HookDiagnostics.hookMethod(videoSnapshot, new ObservedReplacement() {
             @Override protected Object replaceHookedMethod(MethodHookParam p) throws Throwable {
                 Scope call = scope.get();
                 if (call == null || call.encoder != p.thisObject || (Boolean) p.args[4]) {
@@ -124,8 +128,8 @@ final class VideoWindow {
                 }
             }
         });
-        XposedBridge.hookMethod(request, new XC_MethodHook() {
-            @Override protected void beforeHookedMethod(MethodHookParam p) throws Throwable {
+        HookDiagnostics.hookMethod(request, new ObservedHook() {
+            @Override protected void runBefore(MethodHookParam p) throws Throwable {
                 Scope call = scope.get();
                 if (call == null || p.args[1] != call.window || p.args[3] != call.task) return;
                 // Native fixSnapshot copies only head. Complete the same window contract

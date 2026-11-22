@@ -1,5 +1,7 @@
 package com.aurora.camera.compat.filter;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -133,46 +135,46 @@ public final class LutRuntime229 {
             Object added=allocate.invoke(unsafe,h.type("o3.d"));name.set(added,"AURORA_USER_LUT229_"+slot);ordinal.setInt(added,first+slot-1);
             enumCategory.set(added,enumCategory.get(template));enumParameters.set(added,((float[])enumParameters.get(template)).clone());enumTokens.set(added,new String[]{LutStore229.token(slot)});expanded[first+slot-1]=added;
         }
-        XposedBridge.hookMethod(values,new StrictHook(){@Override protected void after(MethodHookParam p){if(!p.hasThrowable())p.setResult((Boolean.TRUE.equals(indexing.get())?base:expanded).clone());}});
-        XposedBridge.hookMethod(valueOf,new StrictHook(){@Override protected void before(MethodHookParam p){String key=(String)p.args[0];for(int i=first;i<expanded.length;i++)if(((Enum<?>)expanded[i]).name().equals(key)){p.setResult(expanded[i]);return;}}});
-        XposedBridge.hookMethod(byCategory,new StrictHook(){@Override protected void before(MethodHookParam p){p.setObjectExtra("229.enum.indexing",indexing.get());indexing.set(true);}@Override protected void after(MethodHookParam p){Boolean old=(Boolean)p.getObjectExtra("229.enum.indexing");if(old==null)indexing.remove();else indexing.set(old);}});
-        XposedBridge.hookMethod(factory,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(values,new StrictHook(){@Override protected void after(MethodHookParam p){if(!p.hasThrowable())p.setResult((Boolean.TRUE.equals(indexing.get())?base:expanded).clone());}});
+        HookDiagnostics.hookMethod(valueOf,new StrictHook(){@Override protected void before(MethodHookParam p){String key=(String)p.args[0];for(int i=first;i<expanded.length;i++)if(((Enum<?>)expanded[i]).name().equals(key)){p.setResult(expanded[i]);return;}}});
+        HookDiagnostics.hookMethod(byCategory,new StrictHook(){@Override protected void before(MethodHookParam p){p.setObjectExtra("229.enum.indexing",indexing.get());indexing.set(true);}@Override protected void after(MethodHookParam p){Boolean old=(Boolean)p.getObjectExtra("229.enum.indexing");if(old==null)indexing.remove();else indexing.set(old);}});
+        HookDiagnostics.hookMethod(factory,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
             int slot=((Enum<?>)p.args[0]).ordinal()-first+1;if(slot<1||slot>LutStore229.SLOTS)return;
             String token=store().resourceToken(slot);if(store().name(slot)==null)throw new IllegalStateException("Selected custom LUT is not configured: "+slot);
             p.setResult(XposedHelpers.newInstance(h.type("o3.b"),512,token,enumParameters.get(p.args[0]),(Integer)p.args[3]));
         }@Override protected void after(MethodHookParam p)throws Throwable{
             if(p.hasThrowable())return;int ordinal=((Enum<?>)p.args[0]).ordinal(),slot=ordinal-first+1;int id=slot>=1&&slot<=LutStore229.SLOTS?id(slot):65536|ordinal;int[] effects=effects(id);if(effects!=null)lookupParameters.set(p.getResult(),parameters((float[])lookupParameters.get(p.getResult()),effects));
         }});
-        XposedBridge.hookMethod(bitmap,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(bitmap,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
             int slot=LutStore229.slot((String)p.args[1]);if(slot==0)return;Bitmap bitmap=BitmapFactory.decodeFile(store().file(slot).getAbsolutePath());if(bitmap==null)throw new java.io.IOException("Custom LUT bitmap missing: "+p.args[1]);p.setResult(bitmap);
         }});
-        XposedBridge.hookMethod(publish,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(publish,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
             int slot=LutStore229.slot((String)p.args[1]);if(slot==0)return;
             if(!(Boolean)write.invoke(null,p.args[2],p.args[3],Files.readAllBytes(store().file(slot).toPath())))throw new java.io.IOException("MIVI LUT delivery failed: "+p.args[1]);p.setResult(null);
         }});
-        XposedBridge.hookMethod(catalog,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(catalog,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
             if(p.hasThrowable()||options.context()==null)return;
             List<Object> rows=appendCatalog((Integer)p.args[0],(List<?>)p.getResult());if(rows!=null)p.setResult(rows);
         }});
-        XposedBridge.hookMethod(remap,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(remap,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
             if(p.hasThrowable())return;Field items=h.field("com.android.camera.data.data.c","mItems");Object list=items.get(p.thisObject);if(!(list instanceof List))return;
             for(Object row:(List<?>)list){int id=Integer.parseInt((String)rowId.get(row));int slot=slot(id);String key=identity(id);String label=key==null?null:store().label(key,slot>0?store().name(slot):null);if(label!=null){rowName.setInt(row,-1);rowDynamic.set(row,label);}}
         }});
         Method profileLabel=h.method("com.android.camera.features.mode.capture.e","z",Context.class);Field profileId=h.field("U9.S","a");
-        XposedBridge.hookMethod(profileLabel,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(profileLabel,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
             if(p.hasThrowable())return;String id=(String)profileId.get(p.thisObject);String kind=id.startsWith("MiCamStyleFront_")?"MiCamStyleFront":id.startsWith("MiCamStyleRear_")?"MiCamStyleRear":null;
             if(kind!=null){int slot=workspace.ownedSlot(p.thisObject);String name=slot>0?store().name(slot):null;if(name!=null)p.setResult(store().label(LutStore229.token(slot),name));else if(slot==0)p.setResult(store().label(LutStore229.recipeKey(kind,id),(String)p.getResult()));}
         }});
-        XposedBridge.hookMethod(attributes,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(attributes,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
             if(p.hasThrowable())return;int[] value=effects((Integer)p.args[0]);if(value==null)return;Object result=p.getResult();attrNoise.setBoolean(result,value[0]>0);attrBlack.setBoolean(result,value[1]==1);attrWhite.setBoolean(result,value[1]==2);float[] nativeValues=(float[])attrParams.get(result);if(nativeValues==null)nativeValues=(float[])h.field("k3.a","a").get(null);attrParams.set(result,parameters(nativeValues,value));
         }});
         // initParams runs inside the native constructor. Soft-focus must be
         // selected before it serializes the Candy script, not after construction.
         Method initParams=h.method("com.xiaomi.camera.mivi.filter.MIVIRenderTag","initParams");
-        XposedBridge.hookMethod(initParams,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(initParams,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
             int[] value=effects(tagId.getInt(p.thisObject));if(value!=null)tagSoft.set(p.thisObject,h.type("com.xiaomi.camera.effect.EffectController$c").getEnumConstants()[value[1]]);
         }});
-        XposedBridge.hookMethod(core,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(core,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
             if(p.hasThrowable())return;int[] value=effects(tagId.getInt(coreOwner.get(p.thisObject)));if(value==null)return;
             @SuppressWarnings("unchecked") Map<String,Object> params=(Map<String,Object>)p.args[0];params.put("needNoise",value[0]>0);params.put("effects",parameters((float[])lookupParameters.get(p.args[1]),value));
         }});
@@ -185,7 +187,7 @@ public final class LutRuntime229 {
         new PhotoFilterVisibility257(h,this).install();
     }
     private void preserveNoFilter(Method method){
-        XposedBridge.hookMethod(method,new StrictHook(2000){
+        HookDiagnostics.hookMethod(method,new StrictHook(2000){
             @Override protected void before(MethodHookParam p){
                 if((Integer)p.args[0]!=noFilter)return;
                 p.setObjectExtra("229.original-filter-view",true);p.setObjectExtra("229.previous-filter-view",indexing.get());indexing.set(true);

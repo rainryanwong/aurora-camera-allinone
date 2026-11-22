@@ -1,5 +1,9 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.ObservedHook;
+
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.app.Activity;
 import android.app.Application;
 import android.content.Context;
@@ -16,7 +20,6 @@ import android.os.SystemClock;
 import android.provider.MediaStore;
 import android.util.Log;
 import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -48,7 +51,7 @@ final class OisReinitHooks implements HookPlan {
     @Override public String id() { return "ois-reinit"; }
 
     @Override public void install() {
-        XposedBridge.hookMethod(attach, new StrictHook() {
+        HookDiagnostics.hookMethod(attach, new StrictHook() {
             @Override protected void after(MethodHookParam p) {
                 if (p.hasThrowable()) return;
                 application = (Application) p.thisObject;
@@ -88,17 +91,17 @@ final class OisReinitHooks implements HookPlan {
         final ForegroundCycle cycle = new ForegroundCycle();
         final Application app;
         final Class<?> activityClass, photoClass;
-        final Method open, release, metadata, restart, currentModule, activityPaused;
+        final Method open, release, metadata, restart, currentModule, activityPaused, switchingModule;
         final Method moduleAlive, moduleBusy, moduleMode, moduleCamera, moduleRecording;
         final Field moduleOwner;
         final CameraManager cameras;
         final ConcurrentHashMap<Integer, Boolean> rearById = new ConcurrentHashMap<>();
         final Handler main = new Handler(Looper.getMainLooper());
         final List<XC_MethodHook.Unhook> hooks = new ArrayList<>(2);
-        final Object fallbackLock = new Object();
-        XC_MethodHook.Unhook fallbackHook;
-        Runnable pendingFallback;
-        long fallbackEpoch;
+        final Object previewLock = new Object();
+        XC_MethodHook.Unhook previewHook;
+        Runnable pendingPreview;
+        long previewEpoch;
 
         Controller(Host host, Application app) throws ReflectiveOperationException {
             this.app = app;
@@ -114,6 +117,7 @@ final class OisReinitHooks implements HookPlan {
             restart = host.method(activityBase, "S8", int.class);
             currentModule = host.method(activityBase, "b2");
             activityPaused = host.method(activityBase, "isActivityPaused");
+            switchingModule = host.method(activityBase, "Cj");
             moduleAlive = moduleInterface.getMethod("isDeviceAndModuleAlive");
             moduleBusy = moduleInterface.getMethod("isDoingAction");
             moduleMode = host.method(module, "getModuleIndex");
@@ -126,13 +130,13 @@ final class OisReinitHooks implements HookPlan {
 
         void start() {
             try {
-                hooks.add(XposedBridge.hookMethod(release, new XC_MethodHook() {
-                    @Override protected void beforeHookedMethod(MethodHookParam p) {
+                hooks.add(HookDiagnostics.hookMethod(release, new ObservedHook() {
+                    @Override protected void runBefore(MethodHookParam p) {
                         long epoch = cycle.activeEpoch();
                         if (epoch != 0) p.setObjectExtra(RELEASE_EPOCH, epoch);
                     }
 
-                    @Override protected void afterHookedMethod(MethodHookParam p) {
+                    @Override protected void runAfter(MethodHookParam p) {
                         Long epoch = (Long) p.getObjectExtra(RELEASE_EPOCH);
                         if (epoch == null) return;
                         if (p.hasThrowable()) {
@@ -143,10 +147,10 @@ final class OisReinitHooks implements HookPlan {
                         }
                     }
                 }));
-                hooks.add(XposedBridge.hookMethod(open, new XC_MethodHook() {
-                    @Override protected void beforeHookedMethod(MethodHookParam p) { beforeOpen(p); }
+                hooks.add(HookDiagnostics.hookMethod(open, new ObservedHook() {
+                    @Override protected void runBefore(MethodHookParam p) { beforeOpen(p); }
 
-                    @Override protected void afterHookedMethod(MethodHookParam p) {
+                    @Override protected void runAfter(MethodHookParam p) {
                         ForegroundCycle.Ticket ticket = (ForegroundCycle.Ticket) p.getObjectExtra(TICKET);
                         if (ticket == null) return;
                         if (p.hasThrowable()) {
@@ -166,9 +170,9 @@ final class OisReinitHooks implements HookPlan {
 
         void stop() {
             cycle.clear();
-            cancelFallback(0);
+            stopObservingPreview(0);
             app.unregisterActivityLifecycleCallbacks(this);
-            for (XC_MethodHook.Unhook hook : hooks) hook.unhook();
+            for (XC_MethodHook.Unhook hook : hooks) HookDiagnostics.unhook(hook);
             hooks.clear();
         }
 
@@ -189,19 +193,17 @@ final class OisReinitHooks implements HookPlan {
             if (epoch != 0) {
                 event("epoch=" + epoch + " armed origin=" + origin);
                 try {
-                    armFallback(epoch);
+                    observePreview(epoch);
                 } catch (RuntimeException | LinkageError failure) {
-                    cancelFallback(epoch);
-                    // A dynamic observer failure must not crash Activity creation;
-                    // the verified native-open path remains available this cycle.
-                    error("epoch=" + epoch + " preview_fallback_unavailable; native-open guard retained", failure);
+                    stopObservingPreview(epoch);
+                    error("epoch=" + epoch + " cannot observe preview for extra reopen", failure);
                 }
             }
         }
 
         void leave(Activity activity) {
             if (cycle.leave(activity)) {
-                cancelFallback(0);
+                stopObservingPreview(0);
                 event("foreground_left; pending module work cancelled");
             }
         }
@@ -210,13 +212,22 @@ final class OisReinitHooks implements HookPlan {
             int cameraId = (Integer) p.args[0];
             // A negative ID is not a device open and must not consume the cycle.
             if (cameraId < 0) return;
+            int mode = (Integer) p.args[1];
+            long reopenEpoch = cycle.takeReopen(cameraId, mode);
+            if (reopenEpoch != 0) {
+                // The host queues CloseCameraCallable before OpenCameraCallable.
+                // Include the target device in that close so the open cannot reuse it.
+                p.args[3] = new String[0];
+                event("epoch=" + reopenEpoch + " extra_reopen_force_close camera=" + cameraId
+                    + " mode=" + mode);
+                return;
+            }
             long expectedEpoch = cycle.nativeOpenSeen();
             if (expectedEpoch == 0) return;
-            cancelFallback(expectedEpoch);
-            int mode = (Integer) p.args[1];
             // This exact host branch returns a synthetic result without opening hardware.
             if (mode == 226) {
                 cycle.skip(expectedEpoch);
+                stopObservingPreview(expectedEpoch);
                 event("candidate_skipped: host mode=226 does not open a camera device");
                 return;
             }
@@ -228,6 +239,7 @@ final class OisReinitHooks implements HookPlan {
                 // Scope cannot be established: leave the original app operation untouched,
                 // but make the missing candidate action explicit instead of faking success.
                 cycle.skip(expectedEpoch);
+                stopObservingPreview(expectedEpoch);
                 error("scope_unavailable camera=" + cameraId + "; candidate skipped this epoch", failure);
                 return;
             }
@@ -265,105 +277,84 @@ final class OisReinitHooks implements HookPlan {
             }
         }
 
-        void armFallback(final long epoch) {
-            synchronized (fallbackLock) {
-                cancelFallback(0);
-                if (!cycle.mayNeedFallback(epoch)) return;
-                fallbackEpoch = epoch;
-                fallbackHook = XposedBridge.hookMethod(metadata, new XC_MethodHook() {
-                    @Override protected void afterHookedMethod(MethodHookParam p) {
-                        if (p.hasThrowable() || !cycle.mayNeedFallback(epoch)) return;
+        void observePreview(long epoch) {
+            synchronized (previewLock) {
+                stopObservingPreview(0);
+                previewEpoch = epoch;
+                previewHook = HookDiagnostics.hookMethod(metadata, new ObservedHook() {
+                    @Override protected void runAfter(MethodHookParam p) {
+                        if (p.hasThrowable() || !cycle.awaitingPreview(epoch)) return;
                         CaptureResult result = (CaptureResult) p.args[0];
                         if (result == null || result.get(CaptureResult.SENSOR_TIMESTAMP) == null) return;
                         Integer intent = result.get(CaptureResult.CONTROL_CAPTURE_INTENT);
                         if (intent == null || intent != CaptureResult.CONTROL_CAPTURE_INTENT_PREVIEW) return;
-                        observeFallback(epoch, p.thisObject);
+                        queueReopen(epoch, p.thisObject);
                     }
                 });
             }
         }
 
-        // epoch=0 is an unconditional lifecycle teardown; stale callbacks may only
-        // remove their own hook/runnable, never a newly armed foreground cycle.
-        void cancelFallback(long epoch) {
-            synchronized (fallbackLock) {
-                if (epoch != 0 && fallbackEpoch != epoch) return;
-                if (fallbackHook != null) fallbackHook.unhook();
-                fallbackHook = null;
-                if (pendingFallback != null) main.removeCallbacks(pendingFallback);
-                pendingFallback = null;
+        void stopObservingPreview(long epoch) {
+            synchronized (previewLock) {
+                if (epoch != 0 && previewEpoch != epoch) return;
+                previewEpoch = 0;
+                if (previewHook != null) HookDiagnostics.unhook(previewHook);
+                previewHook = null;
+                if (pendingPreview != null) main.removeCallbacks(pendingPreview);
+                pendingPreview = null;
             }
         }
 
-        void observeFallback(final long epoch, final Object module) {
+        void queueReopen(long epoch, Object module) {
+            synchronized (previewLock) {
+                if (previewEpoch != epoch || pendingPreview != null) return;
+                pendingPreview = () -> reopenFromPreview(epoch, module);
+                if (!main.post(pendingPreview)) {
+                    stopObservingPreview(epoch);
+                    error("epoch=" + epoch + " cannot schedule extra reopen", null);
+                }
+            }
+        }
+
+        void reopenFromPreview(long epoch, Object module) {
+            synchronized (previewLock) {
+                if (previewEpoch != epoch) return;
+                pendingPreview = null;
+            }
+            if (!cycle.awaitingPreview(epoch)) return;
             try {
                 Object owner = moduleOwner.get(module);
-                if (!(owner instanceof Activity) || currentModule.invoke(owner) != module
-                        || !cycle.claimFallback(epoch, owner)) return;
-                final Activity activity = (Activity) owner;
-                cancelFallback(epoch);
-                Runnable work = () -> runFallback(epoch, activity, module);
-                synchronized (fallbackLock) {
-                    if (!cycle.canRunFallback(epoch, activity)) return;
-                    fallbackEpoch = epoch;
-                    pendingFallback = work;
-                    if (!main.post(work)) {
-                        pendingFallback = null;
-                        cycle.skip(epoch);
-                        event("epoch=" + epoch + " fallback_skipped: main handler unavailable");
-                    }
-                }
-            } catch (IllegalAccessException | InvocationTargetException failure) {
-                cancelFallback(epoch);
-                cycle.skip(epoch);
-                error("epoch=" + epoch + " fallback_scope_failed", failure);
-            }
-        }
-
-        void runFallback(long epoch, Activity activity, Object module) {
-            if (!cycle.canRunFallback(epoch, activity)) return;
-            synchronized (fallbackLock) { pendingFallback = null; }
-            try {
+                if (!(owner instanceof Activity)) return;
+                Activity activity = (Activity) owner;
                 if (activity.isFinishing() || activity.isDestroyed()
                         || (Boolean) activityPaused.invoke(activity)
+                        || (Boolean) switchingModule.invoke(activity)
                         || currentModule.invoke(activity) != module
-                        || !(Boolean) moduleAlive.invoke(module)) {
-                    cycle.skip(epoch);
-                    event("epoch=" + epoch + " fallback_skipped: module not active/current");
+                        || !(Boolean) moduleAlive.invoke(module)) return;
+                if (!photoClass.isInstance(module) || captureIntent(activity.getIntent())) {
+                    stopObservingPreview(epoch);
                     return;
                 }
-                // PhotoBase's busy contract covers snapshot/countdown/burst/save work.
-                // VideoBase.isDoingAction() is always false and its paused-recording
-                // contract is not established; never force a preview rebuild there.
-                if (!photoClass.isInstance(module)) {
-                    cycle.skip(epoch);
-                    event("epoch=" + epoch + " fallback_skipped: non-photo preview module");
-                    return;
-                }
-                if ((Boolean) moduleBusy.invoke(module) || (Boolean) moduleRecording.invoke(module)
-                        || captureIntent(activity.getIntent())) {
-                    cycle.skip(epoch);
-                    event("epoch=" + epoch + " fallback_skipped: capture/recording/intent task");
-                    return;
-                }
+                if ((Boolean) moduleBusy.invoke(module) || (Boolean) moduleRecording.invoke(module)) return;
                 int cameraId = (Integer) moduleCamera.invoke(module);
                 if (cameraId < 0 || !isRearCamera(cameraId)) {
-                    cycle.skip(epoch);
-                    event("epoch=" + epoch + " fallback_skipped: front/external preview");
+                    stopObservingPreview(epoch);
                     return;
                 }
                 int mode = (Integer) moduleMode.invoke(module);
-                if (!cycle.canRunFallback(epoch, activity)) return;
-                event("epoch=" + epoch + " fallback_rebuild_requested camera=" + cameraId
-                    + " mode=" + mode + " via native S8; no native open seen this cycle");
+                if (!cycle.requestReopen(epoch, activity, cameraId, mode)) return;
+                stopObservingPreview(epoch);
+                event("epoch=" + epoch + " extra_reopen_requested camera=" + cameraId + " mode=" + mode);
                 restart.invoke(activity, mode);
             } catch (InvocationTargetException failure) {
-                cycle.skip(epoch);
-                error("epoch=" + epoch + " fallback_native_failed; no retry", failure.getCause());
+                stopObservingPreview(epoch);
+                cycle.cancelReopen(epoch);
+                error("epoch=" + epoch + " extra reopen failed", failure.getCause());
             } catch (IllegalAccessException | CameraAccessException | IllegalArgumentException
                      | IllegalStateException | SecurityException failure) {
-                cycle.skip(epoch);
-                error("epoch=" + epoch + " fallback_contract_failed; no retry", failure);
+                stopObservingPreview(epoch);
+                cycle.cancelReopen(epoch);
+                error("epoch=" + epoch + " extra reopen contract failed", failure);
             }
         }
 

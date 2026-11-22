@@ -8,6 +8,7 @@ public final class Lut229Hooks {
         runtime.attachVideo(video);
         Laboratory253Hooks laboratory=new Laboratory253Hooks(host,runtime);
         LutPage229 page=new LutPage229(host,runtime,laboratory::openImport);
+        laboratory.setImportRefresh(page::refreshImportedFilters);
         com.aurora.camera.compat.filter.FilterStrength270 strength=new com.aurora.camera.compat.filter.FilterStrength270(host);
         return new HookPlan(){public String id(){return "229.lut-import-and-effects";}public void install(){try{runtime.install();video.install();page.install();laboratory.install();strength.install();}catch(ReflectiveOperationException e){throw new IllegalStateException("LUT runtime contract initialization failed",e);}}};
     }

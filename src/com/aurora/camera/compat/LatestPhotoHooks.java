@@ -1,5 +1,7 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.app.Activity;
 import android.content.ContentUris;
 import android.net.Uri;
@@ -9,8 +11,6 @@ import android.os.SystemClock;
 import android.util.Log;
 import android.widget.Toast;
 import com.aurora.camera.compat.legend.M3SaveCompletion261;
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -59,7 +59,7 @@ public final class LatestPhotoHooks {
             public void install() {
                 m3.install();
                 final ThreadLocal<Object> captureScope = new ThreadLocal<>();
-                XposedBridge.hookMethod(start, new StrictHook() {
+                HookDiagnostics.hookMethod(start, new StrictHook() {
                     @Override protected void before(MethodHookParam p) {
                         p.setObjectExtra(SCOPE_KEY, captureScope.get());
                         captureScope.set(p.thisObject);
@@ -69,7 +69,7 @@ public final class LatestPhotoHooks {
                         if (previous == null) captureScope.remove(); else captureScope.set(previous);
                     }
                 });
-                XposedBridge.hookMethod(dispatch, new StrictHook() {
+                HookDiagnostics.hookMethod(dispatch, new StrictHook() {
                     @Override protected void before(MethodHookParam p) throws Throwable {
                         // Only q1 reached from this very Camera2Module.startNormalCapture.
                         // Earlier capture guards and other modules' q1 calls remain untouched.
@@ -78,12 +78,12 @@ public final class LatestPhotoHooks {
                             gate.capture(owner, moduleIndex.getInt(owner) == 256 && m3.selected());
                     }
                 });
-                XposedBridge.hookMethod(click, new StrictHook() {
+                HookDiagnostics.hookMethod(click, new StrictHook() {
                     @Override protected void before(MethodHookParam p) throws Throwable {
                         if (gate.defer(p.thisObject, (Boolean) p.args[0])) p.setResult(null);
                     }
                 });
-                XposedBridge.hookMethod(pause, new StrictHook() {
+                HookDiagnostics.hookMethod(pause, new StrictHook() {
                     @Override protected void before(MethodHookParam p) {
                         gate.cancel(p.thisObject);
                     }

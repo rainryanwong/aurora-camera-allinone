@@ -1,5 +1,7 @@
 package com.aurora.camera.compat.editor.cover247;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -13,7 +15,6 @@ import android.util.Log;
 import com.aurora.camera.compat.Host;
 import com.aurora.camera.compat.StrictHook;
 import com.aurora.camera.compat.editor.Editor245TemplateData;
-import de.robv.android.xposed.XposedBridge;
 import java.io.*;
 import java.lang.reflect.*;
 import java.nio.channels.FileLock;
@@ -84,7 +85,7 @@ public final class Editor247Covers {
     public boolean rendering() { return Boolean.TRUE.equals(drawing.get()); }
 
     public void install() {
-        XposedBridge.hookMethod(bind, new StrictHook() {
+        HookDiagnostics.hookMethod(bind, new StrictHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 Object item = ((List<?>) adapterItems.get(p.thisObject)).get((Integer) p.args[1]);
                 if (!cloudItem.isInstance(item)) return;

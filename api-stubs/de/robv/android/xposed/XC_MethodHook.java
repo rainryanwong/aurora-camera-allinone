@@ -25,6 +25,8 @@ public abstract class XC_MethodHook {
     }
 
     public final class Unhook {
+        public Member getHookedMethod() { return null; }
+        public XC_MethodHook getCallback() { return null; }
         public void unhook() {}
     }
 }

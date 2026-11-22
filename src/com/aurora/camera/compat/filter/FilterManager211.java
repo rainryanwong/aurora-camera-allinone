@@ -1,5 +1,7 @@
 package com.aurora.camera.compat.filter;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
@@ -23,7 +25,6 @@ import android.widget.ListView;
 import android.widget.TextView;
 import com.aurora.camera.compat.Host;
 import com.aurora.camera.compat.StrictHook;
-import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -185,7 +186,7 @@ public final class FilterManager211 {
         return result;
     }
     public void install(){
-        XposedBridge.hookMethod(filterItems,new StrictHook(){
+        HookDiagnostics.hookMethod(filterItems,new StrictHook(){
             @Override protected void after(MethodHookParam p)throws Throwable{
                 if(p.hasThrowable()||p.getResult()==null||!filterComponent.isInstance(p.thisObject))return;
                 List<?> input=(List<?>)p.getResult();Object raw=rawItems.get(p.thisObject),policy=states();
@@ -196,16 +197,16 @@ public final class FilterManager211 {
                 p.setResult(new ArrayList<>(cache.rows));
             }
         });
-        XposedBridge.hookMethod(remap,new StrictHook(){
+        HookDiagnostics.hookMethod(remap,new StrictHook(){
             @Override protected void after(MethodHookParam p){if(filterComponent.isInstance(p.thisObject))XposedHelpers.removeAdditionalInstanceField(p.thisObject,"211.filter.display");}
         });
-        XposedBridge.hookMethod(filterValue,new StrictHook(){
+        HookDiagnostics.hookMethod(filterValue,new StrictHook(){
             @Override protected void after(MethodHookParam p)throws Throwable{
                 if(p.hasThrowable()||!filterComponent.isInstance(p.thisObject))return;
                 String value=(String)p.getResult();for(Map.Entry<Integer,State> e:states().entrySet())if(!e.getValue().enabled&&Integer.toString(e.getKey()).equals(value)){p.setResult(call(defaultFilter,p.thisObject,p.args[0]));return;}
             }
         });
-        XposedBridge.hookMethod(settingsAdd,new StrictHook(){
+        HookDiagnostics.hookMethod(settingsAdd,new StrictHook(){
             @Override protected void after(MethodHookParam p)throws Throwable{
                 if(p.hasThrowable())return;Object root=group.get(p.thisObject);if(find.invoke(root,KEY)!=null)return;
                 Activity host=(Activity)call(activity,p.thisObject);Object item=preference.newInstance(host,null);
@@ -218,13 +219,13 @@ public final class FilterManager211 {
                 click.set(item,listener);call(add,root,item);
             }
         });
-        XposedBridge.hookMethod(activityResult,new StrictHook(){
+        HookDiagnostics.hookMethod(activityResult,new StrictHook(){
             @Override protected void before(MethodHookParam p){
                 Activity owner=(Activity)p.thisObject;WeakReference<Page> ref=pages.get(owner);Page page=ref==null?null:ref.get();
                 int request=(Integer)p.args[0];if(page!=null&&(request==SAVE||request==LOAD)&&page.pending==request){page.result(request,(Integer)p.args[1],(Intent)p.args[2]);p.setResult(null);}
             }
         });
-        XposedBridge.hookMethod(destroy,new StrictHook(){
+        HookDiagnostics.hookMethod(destroy,new StrictHook(){
             @Override protected void before(MethodHookParam p){WeakReference<Page> ref=pages.remove((Activity)p.thisObject);Page page=ref==null?null:ref.get();if(page!=null){page.pending=0;page.dialog.dismiss();}}
         });
     }

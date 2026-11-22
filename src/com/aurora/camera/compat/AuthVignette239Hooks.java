@@ -1,5 +1,7 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.Context;
@@ -254,25 +256,25 @@ public final class AuthVignette239Hooks {
                 try{unavailable=AuthReadiness239.check();template=asset();if(unavailable==null)reload();}
                 catch(Exception failure){unavailable="AUTH 原生组件读取失败："+failure.getMessage();Log.e("AuroraAUTH239",unavailable,failure);}
                 // After callbacks run in reverse priority order: Classic's 50 runs first.
-                XposedBridge.hookMethod(settings,new StrictHook(100){@Override protected void after(MethodHookParam p){if(!p.hasThrowable())entry(p.thisObject);}});
+                HookDiagnostics.hookMethod(settings,new StrictHook(100){@Override protected void after(MethodHookParam p){if(!p.hasThrowable())entry(p.thisObject);}});
                 notes.install();
-                XposedBridge.hookMethod(populate,new StrictHook(){@Override protected void before(MethodHookParam p){if(own(p.thisObject)){populate(p.thisObject);p.setResult(null);}}});
-                XposedBridge.hookMethod(register,new StrictHook(){@Override protected void before(MethodHookParam p){if(own(p.thisObject))p.setResult(null);}});
+                HookDiagnostics.hookMethod(populate,new StrictHook(){@Override protected void before(MethodHookParam p){if(own(p.thisObject)){populate(p.thisObject);p.setResult(null);}}});
+                HookDiagnostics.hookMethod(register,new StrictHook(){@Override protected void before(MethodHookParam p){if(own(p.thisObject))p.setResult(null);}});
                 StrictHook title=new StrictHook(){@Override protected void after(MethodHookParam p){if(!p.hasThrowable()&&own(p.thisObject))com.aurora.camera.compat.ui.NativePageTitle257.set(activity(p.thisObject),experimental(p.thisObject)?"实验性":"徕卡经典暗角着色器");}};
-                XposedBridge.hookMethod(initialize,title);XposedBridge.hookMethod(resume,title);
-                XposedBridge.hookMethod(resume,new StrictHook(){@Override protected void after(MethodHookParam p){if(!p.hasThrowable()&&own(p.thisObject))refresh();}});
-                XposedBridge.hookMethod(result,new StrictHook(){@Override protected void after(MethodHookParam p){
+                HookDiagnostics.hookMethod(initialize,title);HookDiagnostics.hookMethod(resume,title);
+                HookDiagnostics.hookMethod(resume,new StrictHook(){@Override protected void after(MethodHookParam p){if(!p.hasThrowable()&&own(p.thisObject))refresh();}});
+                HookDiagnostics.hookMethod(result,new StrictHook(){@Override protected void after(MethodHookParam p){
                     if(p.hasThrowable()||!own(p.thisObject)||!experimental(p.thisObject))return;
                     if(documents.result(p.thisObject,(Integer)p.args[0],(Integer)p.args[1],(Intent)p.args[2],(fragment,uri)->importFile(fragment,uri))){
                         Log.i("AuroraAUTH241","document_picker_result request="+p.args[0]+" result="+p.args[1]);refresh();
                     }
                 }});
                 if(unavailable!=null){String blocked="AuroraAUTH248 hooks_blocked reason="+unavailable;Log.w("AuroraAUTH239",blocked+"; native hooks not registered");XposedBridge.log(blocked);return;}
-                XposedBridge.hookMethod(library,new StrictHook(){@Override protected void before(MethodHookParam p){if(p.thisObject==h.loader&&"MiFilterSDK".equals(p.args[0])){String path=h.moduleApkPath+"!/lib/arm64-v8a/libMiFilterSDK.so";Log.i("AuroraAUTH241","preview_library_resolved path="+path);p.setResult(path);}}});
+                HookDiagnostics.hookMethod(library,new StrictHook(){@Override protected void before(MethodHookParam p){if(p.thisObject==h.loader&&"MiFilterSDK".equals(p.args[0])){String path=h.moduleApkPath+"!/lib/arm64-v8a/libMiFilterSDK.so";Log.i("AuroraAUTH241","preview_library_resolved path="+path);p.setResult(path);}}});
                 runtime.install();
-                XposedBridge.hookMethod(shaderSource,new StrictHook(){@Override protected void before(MethodHookParam p){p.setResult(AuthFormula239.preview(template,body));}});
-                XposedBridge.hookMethod(shaderInit,new StrictHook(){@Override protected void after(MethodHookParam p){if(!p.hasThrowable()){uniforms(p.thisObject);XposedHelpers.setAdditionalInstanceField(p.thisObject,"aurora.auth239.revision",revision);}else Log.e("AuroraAUTH248","java_shader_compile_failed "+runtime.identity(),p.getThrowable());}});
-                XposedBridge.hookMethod(shaderDraw,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
+                HookDiagnostics.hookMethod(shaderSource,new StrictHook(){@Override protected void before(MethodHookParam p){p.setResult(AuthFormula239.preview(template,body));}});
+                HookDiagnostics.hookMethod(shaderInit,new StrictHook(){@Override protected void after(MethodHookParam p){if(!p.hasThrowable()){uniforms(p.thisObject);XposedHelpers.setAdditionalInstanceField(p.thisObject,"aurora.auth239.revision",revision);}else Log.e("AuroraAUTH248","java_shader_compile_failed "+runtime.identity(),p.getThrowable());}});
+                HookDiagnostics.hookMethod(shaderDraw,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
                     Object previous=XposedHelpers.getAdditionalInstanceField(p.thisObject,"aurora.auth239.revision");
                     if(previous!=null&&(Long)previous!=revision){int program=(Integer)XposedHelpers.getObjectField(p.thisObject,"j");XposedHelpers.callStaticMethod(type("com.xiaomi.gl.MIGL"),"glDeleteProgram",program,"AUTH239");shaderInit.invoke(p.thisObject);}
                     uniforms(p.thisObject);

@@ -8,7 +8,7 @@ import de.robv.android.xposed.XposedHelpers;
 
 /** Small settings adapter for the pinned 1770 Preference API. */
 public final class Options229 {
-    public static final String SOUND="aurora_always_shutter_229", VIDEO="aurora_video_lut_quality_229";
+    public static final String SOUND="aurora_always_shutter_229";
     private final Host host;
     public Options229(Host host){this.host=host;}
     public Context context(){return (Context)XposedHelpers.callStaticMethod(type("com.xiaomi.camera.basic.Global"),"getContext");}

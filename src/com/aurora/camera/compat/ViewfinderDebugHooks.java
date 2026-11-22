@@ -1,6 +1,7 @@
 package com.aurora.camera.compat;
 
-import de.robv.android.xposed.XposedBridge;
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import java.lang.reflect.Method;
 
 /** Route the two lab switches through the camera's original debug readers. */
@@ -17,7 +18,7 @@ public final class ViewfinderDebugHooks {
             @Override public String id() { return "viewfinder-debug-options"; }
 
             @Override public void install() {
-                XposedBridge.hookMethod(property, new StrictHook() {
+                HookDiagnostics.hookMethod(property, new StrictHook() {
                     @Override protected void before(MethodHookParam param) {
                         String key = (String) param.args[0];
                         if (key == null) return;

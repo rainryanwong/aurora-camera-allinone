@@ -1,8 +1,8 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.Context;
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -35,7 +35,7 @@ public final class PhotoQualityHooks {
         return new HookPlan() {
             public String id() { return "F10.photo-quality-super"; }
             public void install() {
-                XposedBridge.hookMethod(factory, new StrictHook() {
+                HookDiagnostics.hookMethod(factory, new StrictHook() {
                     @Override protected void after(MethodHookParam p) throws Throwable {
                         if (p.hasThrowable() || !"pref_camera_jpegquality_key".equals(p.args[0])) return;
                         Object original = p.getResult();

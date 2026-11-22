@@ -1,10 +1,10 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.os.Handler;
 import android.view.View;
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XC_MethodReplacement;
-import de.robv.android.xposed.XposedBridge;
+import com.aurora.camera.diagnostics.ObservedReplacement;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -59,7 +59,7 @@ public final class AiEffectResultHooks {
             public String id() { return "F12.ai-effect-result-state"; }
             public void install() {
                 final ThreadLocal<InitFrame> frames = new ThreadLocal<>();
-                XposedBridge.hookMethod(init, new StrictHook() {
+                HookDiagnostics.hookMethod(init, new StrictHook() {
                     @Override protected void before(MethodHookParam p) {
                         InitFrame frame = new InitFrame(p.thisObject, frames.get());
                         p.setObjectExtra(INIT_SCOPE, frame);
@@ -74,7 +74,7 @@ public final class AiEffectResultHooks {
                         }
                     }
                 });
-                XposedBridge.hookMethod(updateSelection, new StrictHook() {
+                HookDiagnostics.hookMethod(updateSelection, new StrictHook() {
                     @Override protected void before(MethodHookParam p) throws Throwable {
                         InitFrame frame = frames.get();
                         if (frame == null || frame.owner != p.thisObject) return;
@@ -83,7 +83,7 @@ public final class AiEffectResultHooks {
                         frame.reachedSelection = true;
                     }
                 });
-                XposedBridge.hookMethod(result, new XC_MethodReplacement() {
+                HookDiagnostics.hookMethod(result, new ObservedReplacement() {
                     @Override @SuppressWarnings("unchecked")
                     protected Object replaceHookedMethod(MethodHookParam p) throws Throwable {
                         try {

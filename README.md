@@ -4,11 +4,11 @@
 
 ## 开发基线
 
-- All in One：2.0.78
-- CameraCompat：0.1.125 / versionCode 10225
-- 实况运镜：0.5.2 / versionCode 107
-- 相机：6.8.001770.0
-- Git 发布基线：[v2.0.78](https://github.com/rainryanwong/aurora-camera-allinone/releases/tag/v2.0.78)
+- All in One 2.0.99 / versionCode 20099
+- CameraCompat 0.2.86 / versionCode 10286
+- 实况运镜 0.5.3 / versionCode 108
+- 相机 6.8.001770.0
+- 安装包见 [GitHub Release v2.0.99](https://github.com/rainryanwong/aurora-camera-allinone/releases/tag/v2.0.99)。
 
 ## 构建与打包
 
@@ -19,14 +19,14 @@
 独立实况运镜构建入口：`python live-motion/build.py`，沿用相同的签名环境变量。
 该脚本需要本机的原版 1770 APK，以及 `live-motion/inputs/Phoenix-Q0Fix-8.10-a810.apk` 作为参考输入。
 
-2.0.78 完整包入口：`python package_module297.py`，读取下列输入：
+2.0.99 完整包入口为 `python package_module313.py`。运行前在项目的 `release/` 目录准备以下输入：
 
-- `release/camera68_aurora_allinone_v2.0.77_Stock1770_Compat01124_LiveMotion051_AUTH.zip`
-- `release/CameraCompat-0.1.125.apk`
-- `live-motion/release/6.8Cam-LiveMotion-0.5.2.apk`
+- `camera68_aurora_allinone_v2.0.98_Stock1770_Compat01184_LiveMotion053_AUTH.zip`
+- `CameraCompat-0.2.86.apk`（由上述 Compat 构建流程签名）
 
-编译输出、整合包与私有签名材料独立于 Git 源码管理。
-本机原始交付与上述打包输入保留在 `D:/cam18pm/branches/lsp_fix_249_import_preview_20261031/release/`。
+打包脚本更新模块版本、Compat APK、WebUI 功能说明和运行文件哈希表。相机 APK、实况运镜 APK、GS 库及四颗后摄调校沿用基包内载荷。`package_module311.py` 记录此前生成 GS 与调校的打包流程，所用基包和参考调校由本机提供。`webroot/groups.js` 和 `webroot/preview-libraries.txt` 保存整合包内的实际 WebUI 配置。
+
+编译输出、整合包和私有签名材料独立于 Git 源码管理。
 
 ## 项目上下文
 

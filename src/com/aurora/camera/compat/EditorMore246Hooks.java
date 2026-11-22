@@ -1,5 +1,7 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.util.Size;
@@ -8,7 +10,6 @@ import com.aurora.camera.compat.editor.more246.EditorMore246Repository;
 import com.aurora.camera.compat.editor.more246.EditorMore246Repository.Materialized;
 import com.aurora.camera.compat.editor.more246.EditorRecipe248;
 import com.aurora.camera.compat.editor.EditorLeicaFilters292;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -27,6 +28,9 @@ public final class EditorMore246Hooks {
     private final boolean nativeCloud;
     private final EditorLeicaFilters292 leicaFilters;
     private final Method itemId, itemDegree, liveSet;
+    private final Class<?> photoServiceType;
+    private final Method findService, obtainPhotoInfo, isLivePhoto;
+    private final Field originalPhotoType;
     private final Constructor<?> categoryConstructor, filterConstructor, entryConstructor, liveConstructor;
     private final Field app, writerVm, writerCategories, categoryId, categoryKey, categoryItems;
     private final Field entryItem, entryDegree, vmRepository, vmCategories, vmEntries, vmSelected, vmSelectedEvent;
@@ -47,8 +51,12 @@ public final class EditorMore246Hooks {
         Binding(int id,Materialized materialized) { this.id=id; this.materialized=materialized; }
     }
     private static final class Session {
-        List<Object> stockCategories;
-        Session(List<Object> stock) { stockCategories=stock; }
+        final List<Object> stockCategories;
+        final boolean allowRecipes;
+        Session(List<Object> stock, boolean allowRecipes) {
+            stockCategories=stock;
+            this.allowRecipes=allowRecipes;
+        }
     }
 
     public EditorMore246Hooks(Host h) throws ReflectiveOperationException {
@@ -78,6 +86,11 @@ public final class EditorMore246Hooks {
         liveRender=h.method("pd.l","generateLiveRenderData",h.type("Gf.d"),Size.class,h.type("Oo.l"),boolean.class);
         operationPayload=h.field("Gf.d","c");
         operationAction=h.field("Gf.d","b");
+        photoServiceType=h.type("Qf.f");
+        findService=h.method("vh.e$a","c",Class.class);
+        obtainPhotoInfo=h.method(photoServiceType,"obtainPhotoInfo");
+        originalPhotoType=h.field(obtainPhotoInfo.getReturnType(),"e");
+        isLivePhoto=h.method(originalPhotoType.getType(),"a");
         Class<?> layer=h.type("com.miui.mediaeditor.photo.filter.FilterLayer");
         renderBitmap=h.method(layer,"t",layer,CopyOnWriteArrayList.class,Bitmap.class);
         recipeRenderer=new EditorRecipe248(h);
@@ -98,20 +111,21 @@ public final class EditorMore246Hooks {
 
     public void install() {
         leicaFilters.install();
-        XposedBridge.hookMethod(localCatalog,new StrictHook() {
+        HookDiagnostics.hookMethod(localCatalog,new StrictHook() {
             @Override protected void after(MethodHookParam p) throws Throwable {
-                if (!p.hasThrowable()) p.setResult(categories((List<?>)p.getResult()));
+                if (!p.hasThrowable()) p.setResult(categories((List<?>)p.getResult(),availableBindings(canUseRecipes())));
             }
         });
-        XposedBridge.hookMethod(finalWriter,new StrictHook() {
+        HookDiagnostics.hookMethod(finalWriter,new StrictHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
-                writerCategories.set(p.thisObject,categories((List<?>)writerCategories.get(p.thisObject)));
+                writerCategories.set(p.thisObject,categories((List<?>)writerCategories.get(p.thisObject),availableBindings(canUseRecipes())));
             }
             @Override protected void after(MethodHookParam p) throws Throwable {
                 if (p.hasThrowable() || p.getResult()==null) return; // Native null means filter_list is not ready.
                 Object vm=writerVm.get(p.thisObject);
-                sessions.put(vm,new Session(stockCategories((List<?>)writerCategories.get(p.thisObject))));
-                publish(vm,sessions.get(vm));
+                Session session=new Session(stockCategories((List<?>)writerCategories.get(p.thisObject)),canUseRecipes());
+                sessions.put(vm,session);
+                publish(vm,session);
                 repository.start((Context)app.get(null),rows -> {
                     try { update(rows); }
                     catch (ReflectiveOperationException failure) {
@@ -121,13 +135,13 @@ public final class EditorMore246Hooks {
                 });
             }
         });
-        XposedBridge.hookMethod(pathResolver,new StrictHook() {
+        HookDiagnostics.hookMethod(pathResolver,new StrictHook() {
             @Override protected void before(MethodHookParam p) {
                 Binding binding=byRuntimeId.get((Integer)p.args[0]);
                 if (binding!=null) p.setResult(binding.materialized.file.getAbsolutePath());
             }
         });
-        XposedBridge.hookMethod(liveRender,new StrictHook() {
+        HookDiagnostics.hookMethod(liveRender,new StrictHook() {
             @Override protected void after(MethodHookParam p) throws Throwable {
                 if (p.hasThrowable()) return;
                 Object entry=operationPayload.get(p.args[0]);
@@ -141,7 +155,7 @@ public final class EditorMore246Hooks {
                         "aurora-more246:"+id,degree,"",filterModule)));
             }
         });
-        XposedBridge.hookMethod(renderBitmap,new StrictHook(){
+        HookDiagnostics.hookMethod(renderBitmap,new StrictHook(){
             @Override protected void before(MethodHookParam p)throws Throwable{
                 List<?> operations=(List<?>)p.args[1];if(operations.isEmpty())return;
                 Object operation=operations.get(operations.size()-1),entry=operationPayload.get(operation);if(!entryType.isInstance(entry))return;
@@ -157,7 +171,7 @@ public final class EditorMore246Hooks {
                 p.setResult(null);
             }
         });
-        XposedBridge.hookMethod(cleared,new StrictHook() {
+        HookDiagnostics.hookMethod(cleared,new StrictHook() {
             @Override protected void after(MethodHookParam p)throws Throwable {
                 sessions.remove(p.thisObject); if (sessions.isEmpty()) {repository.stop();recipeRenderer.close();}
             }
@@ -192,7 +206,23 @@ public final class EditorMore246Hooks {
         return filterConstructor.newInstance(binding.id,0,binding.materialized.row.name,0,CATEGORY,100,
                 binding.materialized.file.getAbsolutePath(),"LUT","");
     }
-    private ArrayList<Object> categories(List<?> input) throws ReflectiveOperationException {
+    private boolean canUseRecipes() throws ReflectiveOperationException {
+        Object service=findService.invoke(null,photoServiceType);
+        Object photoInfo=service==null ? null : obtainPhotoInfo.invoke(service);
+        return photoInfo!=null && !(Boolean)isLivePhoto.invoke(originalPhotoType.get(photoInfo));
+    }
+
+    private List<Binding> availableBindings(boolean allowRecipes) {
+        List<Binding> bindings=current;
+        if (allowRecipes) return bindings;
+        List<Binding> available=new ArrayList<>();
+        for (Binding binding:bindings) {
+            if (binding.materialized.row.recipe==null) available.add(binding);
+        }
+        return available;
+    }
+
+    private ArrayList<Object> categories(List<?> input,List<Binding> available) throws ReflectiveOperationException {
         ArrayList<Object> result=new ArrayList<>(stockCategories(input));
         for (Object category:result) {
             if (categoryId.getInt(category)==CATEGORY) throw new IllegalStateException("Stock category ID collides with More246");
@@ -201,8 +231,8 @@ public final class EditorMore246Hooks {
                 if (byRuntimeId.containsKey(id)) throw new IllegalStateException("Stock filter ID collides with More246: "+id);
             }
         }
-        if (!current.isEmpty()) {
-            List<Object> items=new ArrayList<>(); for (Binding binding:current) items.add(nativeItem(binding));
+        if (!available.isEmpty()) {
+            List<Object> items=new ArrayList<>(); for (Binding binding:available) items.add(nativeItem(binding));
             result.add(nativeCloud ? categoryConstructor.newInstance(items,"更多",CATEGORY_KEY,"",CATEGORY)
                     : categoryConstructor.newInstance("更多",CATEGORY_KEY,CATEGORY,"",items));
         }
@@ -211,7 +241,8 @@ public final class EditorMore246Hooks {
 
     @SuppressWarnings("unchecked")
     private void publish(Object vm,Session session) throws ReflectiveOperationException {
-        List<Object> categories=categories(session.stockCategories);
+        List<Binding> available=availableBindings(session.allowRecipes);
+        List<Object> categories=categories(session.stockCategories,available);
         Map<String,Object> map=(Map<String,Object>)vmRepository.get(vm);
         Object original=map.get("filter_list");
         if (!(original instanceof List)) throw new IllegalStateException("Native filter_list is unavailable");
@@ -220,7 +251,7 @@ public final class EditorMore246Hooks {
             int id=(Integer)itemId.invoke(entryItem.get(value));
             if (byRuntimeId.containsKey(id)) previous.put(id,value); else entries.add(value);
         }
-        for (Binding binding:current) {
+        for (Binding binding:available) {
             Object old=previous.get(binding.id);
             int degree=old==null ? 100 : entryDegree.getInt(old);
             entries.add(nativeCloud ? entryConstructor.newInstance(nativeItem(binding),degree,17,false,false,false,

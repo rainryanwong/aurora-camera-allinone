@@ -1,11 +1,12 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.Context;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewParent;
 import com.aurora.camera.compat.ui.MiuixDialogs;
-import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -51,10 +52,10 @@ public final class PhotoStyleSwitchHooks {
                 hide.invoke(null);
             }
             public void install(){
-                XposedBridge.hookMethod(settings,new StrictHook(){@Override protected void after(MethodHookParam p){
+                HookDiagnostics.hookMethod(settings,new StrictHook(){@Override protected void after(MethodHookParam p){
                     if(!p.hasThrowable())options.addAction(p.thisObject,KEY,"摄影风格切换优化",TITLES[choice()],"pref_aurora_watermark_device_name",()->choose(p.thisObject));
                 }});
-                XposedBridge.hookMethod(click,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable {
+                HookDiagnostics.hookMethod(click,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable {
                     View item=(View)p.args[0];if(choice()!=2||item==null)return;
                     Optional<?> owner=(Optional<?>)config.invoke(null);if(!owner.isPresent())return;
                     int currentMode=mode.getInt(p.thisObject);
@@ -65,10 +66,10 @@ public final class PhotoStyleSwitchHooks {
                     if((Boolean)closed.invoke(style,currentMode)){clearMutex.invoke(null,currentMode);clearStyle.invoke(null);reopen.invoke(style,currentMode,false);}
                     apply.invoke(owner.get(),next);refresh.invoke(p.thisObject,new int[]{190});p.setResult(null);
                 }});
-                XposedBridge.hookMethod(touch,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable {
+                HookDiagnostics.hookMethod(touch,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable {
                     if(!p.hasThrowable()&&((MotionEvent)p.args[0]).getActionMasked()==MotionEvent.ACTION_UP)close((View)p.thisObject);
                 }});
-                XposedBridge.hookMethod(perform,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable {if(!p.hasThrowable())close((View)p.thisObject);}});
+                HookDiagnostics.hookMethod(perform,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable {if(!p.hasThrowable())close((View)p.thisObject);}});
             }
         };
     }

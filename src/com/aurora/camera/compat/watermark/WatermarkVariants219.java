@@ -1,11 +1,12 @@
 package com.aurora.camera.compat.watermark;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.Context;
 import com.android.camera.port.AuroraWatermarkName;
 import com.aurora.camera.compat.Host;
 import com.aurora.camera.compat.StrictHook;
 import de.robv.android.xposed.XC_MethodHook.MethodHookParam;
-import de.robv.android.xposed.XposedBridge;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.InputStream;
@@ -87,21 +88,21 @@ public final class WatermarkVariants219 {
         }
     }
     public void install(){
-        XposedBridge.hookMethod(parse,new StrictHook(){
+        HookDiagnostics.hookMethod(parse,new StrictHook(){
             @Override protected void before(MethodHookParam p)throws Throwable{p.setObjectExtra("219.parser.previous",parsing.get());parsing.set(parseOwner.get(p.thisObject));}
             @Override protected void after(MethodHookParam p){Object previous=p.getObjectExtra("219.parser.previous");if(previous==null)parsing.remove();else parsing.set(previous);}
         });
-        XposedBridge.hookMethod(read,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(read,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
             Object owner=parsing.get();if(owner==null||p.hasThrowable()||!(p.getResult() instanceof String))return;
             String path=(String)parserPath.get(owner);if(!new File(path).equals(p.args[0]))return;
             String folder=folder(path);if(folder==null)return;String selected=choice(folder);
             p.setResult(policy().rewrite(folder,(String)p.getResult(),selected));loaded.put(owner,selected);
         }});
-        XposedBridge.hookMethod(mix,new StrictHook(100){
+        HookDiagnostics.hookMethod(mix,new StrictHook(100){
             @Override protected void before(MethodHookParam p)throws Throwable{p.args[1]=AuroraWatermarkName.apply((String)p.args[1]);begin(p);}
             @Override protected void after(MethodHookParam p){end(p);}
         });
-        for(Method method:new Method[]{preview,publish})XposedBridge.hookMethod(method,new StrictHook(100){
+        for(Method method:new Method[]{preview,publish})HookDiagnostics.hookMethod(method,new StrictHook(100){
             @Override protected void before(MethodHookParam p)throws Throwable{begin(p);}
             @Override protected void after(MethodHookParam p){end(p);}
         });

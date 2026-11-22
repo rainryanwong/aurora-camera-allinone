@@ -1,5 +1,7 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.view.View;
@@ -9,7 +11,6 @@ import com.aurora.camera.compat.filter.FilterWorkspace215;
 import com.aurora.camera.compat.filter.LutStore229;
 import com.aurora.camera.compat.filter.CamStylePreview249;
 import com.aurora.camera.compat.filter.WorkspaceFilterOrder270;
-import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import java.io.File;
 import java.io.IOException;
@@ -168,14 +169,14 @@ public final class RecipeSharing219Hooks implements HookPlan {
         Recipe active=active();Object effect=controller.invoke(null);metadataName.set(effect,active==null?"":active.name);metadataJson.set(effect,"");
     }
     public void install(){
-        XposedBridge.hookMethod(labelBind,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(labelBind,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
             if(p.hasThrowable())return;Object recipe=XposedHelpers.getAdditionalInstanceField(p.args[0],ROW);
             if(recipe instanceof Recipe){Recipe r=(Recipe)recipe;labelName.invoke(p.thisObject,new LutStore229(context()).label(LutStore229.recipeKey(r.kind,r.id),r.name));}
         }});
         // The native GL task reads P.getItems(), not the adapter's list. Expose
         // the projection only inside this exact thumbnail task; master catalogs
         // and native restore/save callers continue to see native rows.
-        XposedBridge.hookMethod(thumbnailTask,new StrictHook(){
+        HookDiagnostics.hookMethod(thumbnailTask,new StrictHook(){
             @Override protected void before(MethodHookParam p)throws Throwable{
                 Object owner=taskOwner.get(p.thisObject);
                 if(taskKind.getInt(p.thisObject)!=3||!fragmentClass.isInstance(owner)||!supports(fragmentMode.getInt(owner),front()))return;
@@ -186,13 +187,13 @@ public final class RecipeSharing219Hooks implements HookPlan {
                 if(previous==null)thumbnailOwner.remove();else thumbnailOwner.set(previous);
             }
         });
-        XposedBridge.hookMethod(componentItems,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(componentItems,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
             Object owner=thumbnailOwner.get();if(!p.hasThrowable()&&owner!=null&&component.get(owner)==p.thisObject)p.setResult(rows.get(owner));
         }});
         // Selfie CamStyle opens U9.M, not j0. Use the camera's existing basic
         // filter button and Pa transaction, with an explicit filter-only tab.
         // This avoids importing rear-only camera controls with workspace items.
-        XposedBridge.hookMethod(frontEntry,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(frontEntry,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
             if(entryMode.getInt(p.thisObject)!=163||!front())return;
             Object button=basicEntry.invoke(p.thisObject);
             entryClick.set(button,(View.OnClickListener)view->{
@@ -203,22 +204,22 @@ public final class RecipeSharing219Hooks implements HookPlan {
             });
             p.setResult(button);
         }});
-        XposedBridge.hookMethod(init,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{if(!p.hasThrowable())project(p.thisObject);}});
-        XposedBridge.hookMethod(adapter,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{if(!p.hasThrowable()&&supports(fragmentMode.getInt(p.thisObject),front()))adapterRows.set(p.getResult(),new ArrayList<>((List<?>)rows.get(p.thisObject)));}});
-        XposedBridge.hookMethod(index,new StrictHook(){
+        HookDiagnostics.hookMethod(init,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{if(!p.hasThrowable())project(p.thisObject);}});
+        HookDiagnostics.hookMethod(adapter,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{if(!p.hasThrowable()&&supports(fragmentMode.getInt(p.thisObject),front()))adapterRows.set(p.getResult(),new ArrayList<>((List<?>)rows.get(p.thisObject)));}});
+        HookDiagnostics.hookMethod(index,new StrictHook(){
           @Override protected void before(MethodHookParam p)throws Throwable{project(p.thisObject);}
           @Override protected void after(MethodHookParam p)throws Throwable{
             if(!fragmentClass.isInstance(p.thisObject)||!supports(fragmentMode.getInt(p.thisObject),front()))return;
             int selected=recipeIndex(p.thisObject);if(selected>=0)p.setResult(selected);
         }});
-        XposedBridge.hookMethod(cloudRefresh,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{if(!p.hasThrowable())synchronizeVisible(p.args[0]);}});
-        XposedBridge.hookMethod(filterViewInit,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{if(!p.hasThrowable())synchronizeVisible(p.args[2]);}});
-        XposedBridge.hookMethod(restoreItems,new StrictHook(){@Override protected void before(MethodHookParam p){
+        HookDiagnostics.hookMethod(cloudRefresh,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{if(!p.hasThrowable())synchronizeVisible(p.args[0]);}});
+        HookDiagnostics.hookMethod(filterViewInit,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{if(!p.hasThrowable())synchronizeVisible(p.args[2]);}});
+        HookDiagnostics.hookMethod(restoreItems,new StrictHook(){@Override protected void before(MethodHookParam p){
             if(!filterClass.isInstance(p.thisObject))return;ArrayList<Object> nativeRows=new ArrayList<>();boolean projected=false;
             for(Object row:(List<?>)p.args[1])if(XposedHelpers.getAdditionalInstanceField(row,ROW)==null)nativeRows.add(row);else projected=true;
             if(projected)p.args[1]=nativeRows;
         }});
-        XposedBridge.hookMethod(choose,new StrictHook(){
+        HookDiagnostics.hookMethod(choose,new StrictHook(){
             @Override protected void before(MethodHookParam p)throws Throwable {
                 if(!supports(fragmentMode.getInt(p.thisObject),front())||!(Boolean)enabled.invoke(p.thisObject))return;
                 Object row=((List<?>)rows.get(p.thisObject)).get((Integer)p.args[0]);Recipe recipe=(Recipe)XposedHelpers.getAdditionalInstanceField(row,ROW);
@@ -239,17 +240,17 @@ public final class RecipeSharing219Hooks implements HookPlan {
                 else if(recipe!=null)p.setResult(String.valueOf(recipe.colors[i]));else if(ownsStyle())p.setResult("0");return;
             }
         }};
-        XposedBridge.hookMethod(componentValue,value);XposedBridge.hookMethod(filterValue,value);
-        for(Method method:styleConsumers)XposedBridge.hookMethod(method,new StrictHook(){
+        HookDiagnostics.hookMethod(componentValue,value);HookDiagnostics.hookMethod(filterValue,value);
+        for(Method method:styleConsumers)HookDiagnostics.hookMethod(method,new StrictHook(){
             @Override protected void before(MethodHookParam p)throws Throwable{String key=selectedEffectsKey();if(active()!=null||ownsStyle()||(key!=null&&new LutStore229(context()).effects(key)!=null)){styleDepth.set(styleDepth.get()+1);p.setObjectExtra("219.style.scope",true);}}
             @Override protected void after(MethodHookParam p){if(p.getObjectExtra("219.style.scope")==null)return;int depth=styleDepth.get()-1;if(depth==0)styleDepth.remove();else styleDepth.set(depth);}
         });
         // F.R0 also controls the CamStyle menu. Qualify only the actual pixel
         // parameter consumers; selecting a recipe must not replace the native UI.
-        XposedBridge.hookMethod(palette,new StrictHook(){@Override protected void before(MethodHookParam p){if(styleDepth.get()>0)p.setResult(true);}});
-        XposedBridge.hookMethod(softLight,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{if(styleDepth.get()>0&&(Integer)p.args[0]==mode())p.setResult(true);}});
-        for(Method method:renderCreate)XposedBridge.hookMethod(method,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{if(!p.hasThrowable()&&active()!=null)render(p.thisObject,true);}});
-        for(Method method:renderDestroy)XposedBridge.hookMethod(method,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{if(Boolean.TRUE.equals(XposedHelpers.getAdditionalInstanceField(p.thisObject,PHOTO)))render(p.thisObject,false);}});
+        HookDiagnostics.hookMethod(palette,new StrictHook(){@Override protected void before(MethodHookParam p){if(styleDepth.get()>0)p.setResult(true);}});
+        HookDiagnostics.hookMethod(softLight,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{if(styleDepth.get()>0&&(Integer)p.args[0]==mode())p.setResult(true);}});
+        for(Method method:renderCreate)HookDiagnostics.hookMethod(method,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{if(!p.hasThrowable()&&active()!=null)render(p.thisObject,true);}});
+        for(Method method:renderDestroy)HookDiagnostics.hookMethod(method,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{if(Boolean.TRUE.equals(XposedHelpers.getAdditionalInstanceField(p.thisObject,PHOTO)))render(p.thisObject,false);}});
         nativePreview.install();
     }
 }

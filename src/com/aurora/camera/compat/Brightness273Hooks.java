@@ -1,5 +1,7 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.Context;
@@ -10,7 +12,6 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.Toast;
 import com.aurora.camera.compat.ui.MiuixDialogs;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
@@ -126,10 +127,10 @@ public final class Brightness273Hooks implements HookPlan {
         });
     }
     @Override public void install(){
-        XposedBridge.hookMethod(text,new StrictHook(){@Override protected void before(MethodHookParam p){if((Integer)p.args[0]==TITLE)p.setResult("亮度提升");}});
-        XposedBridge.hookMethod(factory,new StrictHook(){@Override protected void before(MethodHookParam p){if((Integer)p.args[0]==TOKEN)p.setResult(item());}});
-        XposedBridge.hookMethod(dispatch,new StrictHook(){@Override protected void before(MethodHookParam p){if((Integer)p.args[0]==TOKEN){toggle();p.setResult(null);}}});
-        XposedBridge.hookMethod(streetMenu,new StrictHook(){@Override protected void after(MethodHookParam p){
+        HookDiagnostics.hookMethod(text,new StrictHook(){@Override protected void before(MethodHookParam p){if((Integer)p.args[0]==TITLE)p.setResult("亮度提升");}});
+        HookDiagnostics.hookMethod(factory,new StrictHook(){@Override protected void before(MethodHookParam p){if((Integer)p.args[0]==TOKEN)p.setResult(item());}});
+        HookDiagnostics.hookMethod(dispatch,new StrictHook(){@Override protected void before(MethodHookParam p){if((Integer)p.args[0]==TOKEN){toggle();p.setResult(null);}}});
+        HookDiagnostics.hookMethod(streetMenu,new StrictHook(){@Override protected void after(MethodHookParam p){
             if(p.hasThrowable())return;
             @SuppressWarnings("unchecked") List<Object> previous=(List<Object>)p.getResult();
             for(Object row:previous)if((Integer)getObjectField(row,"c")==TOKEN)return;
@@ -140,8 +141,8 @@ public final class Brightness273Hooks implements HookPlan {
             @SuppressWarnings("unchecked") List<Integer> previous=(List<Integer>)p.getResult();
             if(!previous.contains(TOKEN)){ArrayList<Integer> result=new ArrayList<>(previous);result.add(TOKEN);p.setResult(result);}
         }};
-        XposedBridge.hookMethod(defaults,append);XposedBridge.hookMethod(candidates,append);
-        XposedBridge.hookMethod(available,new StrictHook(){@Override protected void before(MethodHookParam p){
+        HookDiagnostics.hookMethod(defaults,append);HookDiagnostics.hookMethod(candidates,append);
+        HookDiagnostics.hookMethod(available,new StrictHook(){@Override protected void before(MethodHookParam p){
             int mode=(Integer)p.args[0];
             if(mode==182){
                 @SuppressWarnings("unchecked") ArrayList<Integer> values=(ArrayList<Integer>)p.args[1];values.remove(Integer.valueOf(TOKEN));
@@ -153,7 +154,7 @@ public final class Brightness273Hooks implements HookPlan {
             @SuppressWarnings("unchecked") List<Integer> saved=(List<Integer>)call(p.thisObject,"U",mode);
             if(!saved.isEmpty()&&!saved.contains(TOKEN)){ArrayList<Integer> next=new ArrayList<>(saved);next.add(TOKEN);call(p.thisObject,"Y",next,false);}
         }});
-        XposedBridge.hookMethod(editor,new StrictHook(){
+        HookDiagnostics.hookMethod(editor,new StrictHook(){
             @Override protected void before(MethodHookParam p){
                 int mode=(Integer)getObjectField(p.thisObject,"mCurrentMode");
                 if(mode==182){@SuppressWarnings("unchecked") ArrayList<Integer> previous=(ArrayList<Integer>)p.args[0];ArrayList<Integer> values=new ArrayList<>(previous);values.remove(Integer.valueOf(TOKEN));p.args[0]=values;return;}
@@ -172,24 +173,24 @@ public final class Brightness273Hooks implements HookPlan {
                 items.add(Math.min(normalized.indexOf(TOKEN),items.size()),row);
             }
         });
-        XposedBridge.hookMethod(componentWrite,new StrictHook(){@Override protected void after(MethodHookParam p){
+        HookDiagnostics.hookMethod(componentWrite,new StrictHook(){@Override protected void after(MethodHookParam p){
             if(!p.hasThrowable()&&boost.active()&&(masterType.isInstance(p.thisObject)||dolbyType.isInstance(p.thisObject))&&videoRestricted(mode()))boost.stop();
         }});
         StrictHook videoState=new StrictHook(){@Override protected void after(MethodHookParam p){
             if(!p.hasThrowable()&&Boolean.TRUE.equals(p.getResult())&&boost.active()&&(mode()==162||mode()==180))boost.stop();
         }};
-        XposedBridge.hookMethod(masterEnabled,videoState);XposedBridge.hookMethod(dolbyEnabled,videoState);
-        XposedBridge.hookMethod(modeChange,new StrictHook(){
+        HookDiagnostics.hookMethod(masterEnabled,videoState);HookDiagnostics.hookMethod(dolbyEnabled,videoState);
+        HookDiagnostics.hookMethod(modeChange,new StrictHook(){
             @Override protected void before(MethodHookParam p){
                 int target=(Integer)call(p.args[0],"getTargetMode");
                 if(boost.active()&&videoRestricted(target))boost.stop();
             }
             @Override protected void after(MethodHookParam p){if(!p.hasThrowable()&&boost.active()&&videoRestricted(mode()))boost.stop();}
         });
-        XposedBridge.hookMethod(settings,new StrictHook(1500){@Override protected void after(MethodHookParam p){if(!p.hasThrowable())settings(p.thisObject);}});
-        XposedBridge.hookMethod(resume,new StrictHook(){@Override protected void after(MethodHookParam p){if(cameraType.isInstance(p.thisObject))boost.activity((Activity)p.thisObject);}});
-        XposedBridge.hookMethod(windowAttributes,new StrictHook(){@Override protected void before(MethodHookParam p){boost.attributes(((Activity)p.thisObject).getWindow(),(android.view.WindowManager.LayoutParams)p.args[0]);}});
-        XposedBridge.hookMethod(pause,new StrictHook(){@Override protected void before(MethodHookParam p){if(cameraType.isInstance(p.thisObject))boost.stop();}});
-        XposedBridge.hookMethod(focus,new StrictHook(){@Override protected void before(MethodHookParam p){boost.focus((Boolean)p.args[0]);}});
+        HookDiagnostics.hookMethod(settings,new StrictHook(1500){@Override protected void after(MethodHookParam p){if(!p.hasThrowable())settings(p.thisObject);}});
+        HookDiagnostics.hookMethod(resume,new StrictHook(){@Override protected void after(MethodHookParam p){if(cameraType.isInstance(p.thisObject))boost.activity((Activity)p.thisObject);}});
+        HookDiagnostics.hookMethod(windowAttributes,new StrictHook(){@Override protected void before(MethodHookParam p){boost.attributes(((Activity)p.thisObject).getWindow(),(android.view.WindowManager.LayoutParams)p.args[0]);}});
+        HookDiagnostics.hookMethod(pause,new StrictHook(){@Override protected void before(MethodHookParam p){if(cameraType.isInstance(p.thisObject))boost.stop();}});
+        HookDiagnostics.hookMethod(focus,new StrictHook(){@Override protected void before(MethodHookParam p){boost.focus((Boolean)p.args[0]);}});
     }
 }

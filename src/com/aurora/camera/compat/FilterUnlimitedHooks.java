@@ -1,10 +1,10 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.view.View;
 import com.aurora.camera.compat.filter.FilterDisplay;
 import com.aurora.camera.compat.filter.FilterSelectionNotifier;
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
@@ -34,12 +34,12 @@ public final class FilterUnlimitedHooks {
             @Override public String id() { return "filter-unlimited"; }
 
             @Override public void install() {
-                XposedBridge.hookMethod(access.capacity, new StrictHook() {
+                HookDiagnostics.hookMethod(access.capacity, new StrictHook() {
                     @Override protected void before(MethodHookParam param) {
                         param.setResult(Integer.MAX_VALUE);
                     }
                 });
-                XposedBridge.hookMethod(access.capacityHint, new StrictHook() {
+                HookDiagnostics.hookMethod(access.capacityHint, new StrictHook() {
                     @Override protected void before(MethodHookParam param) {
                         int capacity = (Integer) call(access.capacity, param.thisObject);
                         param.setResult(call(access.fragmentString, param.thisObject,
@@ -47,24 +47,24 @@ public final class FilterUnlimitedHooks {
                     }
                 });
                 for (Method comparator : access.comparators) {
-                    XposedBridge.hookMethod(comparator, new StrictHook() {
+                    HookDiagnostics.hookMethod(comparator, new StrictHook() {
                         @Override protected void before(MethodHookParam param) {
                             param.setResult(Integer.compare(access.order(param.args[0]),
                                     access.order(param.args[1])));
                         }
                     });
                 }
-                XposedBridge.hookMethod(access.beginLoad, new StrictHook() {
+                HookDiagnostics.hookMethod(access.beginLoad, new StrictHook() {
                     @Override protected void before(MethodHookParam param) {
                         XposedHelpers.removeAdditionalInstanceField(param.thisObject, DISPLAY);
                     }
                 });
-                XposedBridge.hookMethod(access.bind, new StrictHook() {
+                HookDiagnostics.hookMethod(access.bind, new StrictHook() {
                     @Override protected void after(MethodHookParam param) {
                         if (!param.hasThrowable()) access.refresh(param.thisObject, (Integer) param.args[0]);
                     }
                 });
-                XposedBridge.hookMethod(access.reload, new StrictHook() {
+                HookDiagnostics.hookMethod(access.reload, new StrictHook() {
                     @Override protected void after(MethodHookParam param) {
                         if (!param.hasThrowable()) {
                             boolean changed = access.refresh(param.thisObject, (Integer) param.args[0]);
@@ -72,19 +72,19 @@ public final class FilterUnlimitedHooks {
                         }
                     }
                 });
-                XposedBridge.hookMethod(access.remove, new StrictHook() {
+                HookDiagnostics.hookMethod(access.remove, new StrictHook() {
                     @Override protected void after(MethodHookParam param) {
                         if (!param.hasThrowable() && access.camStyle.isInstance(param.thisObject)) {
                             access.refresh(param.thisObject, (Integer) read(access.workspaceMode, param.thisObject));
                         }
                     }
                 });
-                XposedBridge.hookMethod(access.findIdentity, new StrictHook() {
+                HookDiagnostics.hookMethod(access.findIdentity, new StrictHook() {
                     @Override protected void before(MethodHookParam param) {
                         param.args[0] = access.identity(param.thisObject, (String) param.args[0]);
                     }
                 });
-                XposedBridge.hookMethod(access.findPosition, new StrictHook() {
+                HookDiagnostics.hookMethod(access.findPosition, new StrictHook() {
                     @Override protected void before(MethodHookParam param) {
                         Object item = param.args[0];
                         if (item == null) { param.setResult(-1); return; }
@@ -99,7 +99,7 @@ public final class FilterUnlimitedHooks {
                         param.setResult(-1);
                     }
                 });
-                XposedBridge.hookMethod(access.selectionNotify, new StrictHook() {
+                HookDiagnostics.hookMethod(access.selectionNotify, new StrictHook() {
                     @Override protected void before(MethodHookParam param) {
                         Object owner = param.thisObject;
                         if (!access.camStyle.isInstance(read(access.ownerWorkspace, owner))
@@ -117,7 +117,7 @@ public final class FilterUnlimitedHooks {
                 // Observe its parser results only within this exact restore call,
                 // then append the already-parsed tail after a successful return.
                 final ThreadLocal<RestoreCapture> restoring = new ThreadLocal<>();
-                XposedBridge.hookMethod(access.restore, new StrictHook() {
+                HookDiagnostics.hookMethod(access.restore, new StrictHook() {
                     @Override protected void before(MethodHookParam param) {
                         boolean enabled = access.camStyle.isInstance(param.thisObject);
                         RestoreCapture capture = new RestoreCapture(param.thisObject,
@@ -134,7 +134,7 @@ public final class FilterUnlimitedHooks {
                         }
                     }
                 });
-                XposedBridge.hookMethod(access.parseRow, new StrictHook() {
+                HookDiagnostics.hookMethod(access.parseRow, new StrictHook() {
                     @Override protected void after(MethodHookParam param) {
                         RestoreCapture capture = restoring.get();
                         if (capture != null && capture.enabled && !param.hasThrowable()

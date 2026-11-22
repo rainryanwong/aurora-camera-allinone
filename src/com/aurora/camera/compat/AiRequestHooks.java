@@ -1,8 +1,8 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.hardware.camera2.CaptureResult;
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -40,12 +40,12 @@ public final class AiRequestHooks {
             public void install() {
                 final Policy policy = new Policy(staticTag, modelTag, motion);
                 final ThreadLocal<Frame> frames = new ThreadLocal<>();
-                XposedBridge.hookMethod(constructor, new StrictHook() {
+                HookDiagnostics.hookMethod(constructor, new StrictHook() {
                     @Override protected void after(MethodHookParam p) throws Throwable {
                         if (!p.hasThrowable()) policy.tag(p.thisObject);
                     }
                 });
-                XposedBridge.hookMethod(snapshot, new StrictHook() {
+                HookDiagnostics.hookMethod(snapshot, new StrictHook() {
                     @Override protected void after(MethodHookParam p) throws Throwable {
                         if (p.hasThrowable() || !"cameraAiParam".equals(p.args[2])) return;
                         Object request = p.args[3];
@@ -53,7 +53,7 @@ public final class AiRequestHooks {
                                 || request.getClass() == debugType)) policy.snapshot(request);
                     }
                 });
-                XposedBridge.hookMethod(parse, new StrictHook() {
+                HookDiagnostics.hookMethod(parse, new StrictHook() {
                     @Override protected void before(MethodHookParam p) throws Throwable {
                         Frame frame = new Frame(model.get(p.thisObject), frames.get());
                         p.setObjectExtra(SCOPE, frame); frames.set(frame);
@@ -66,7 +66,7 @@ public final class AiRequestHooks {
                         if (!p.hasThrowable()) policy.apply(frame.model);
                     }
                 });
-                XposedBridge.hookMethod(consume, new StrictHook() {
+                HookDiagnostics.hookMethod(consume, new StrictHook() {
                     @Override protected void before(MethodHookParam p) throws Throwable {
                         Frame frame = frames.get();
                         Object payload = p.args[0];

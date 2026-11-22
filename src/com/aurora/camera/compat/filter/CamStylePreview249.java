@@ -1,8 +1,9 @@
 package com.aurora.camera.compat.filter;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import com.aurora.camera.compat.Host;
 import com.aurora.camera.compat.StrictHook;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -34,7 +35,7 @@ public final class CamStylePreview249 {
         }finally{CamStyleAccess260.unlock();}
     }
     public void install(){
-        XposedBridge.hookMethod(write,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(write,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
             if(p.hasThrowable()||p.args[0]!=picture)return;
             Object[] values=(Object[])p.args[1];if((Integer)values[0]<=0&&(Integer)values[8]<=0)return;
             if(!eligible(p.thisObject))return;

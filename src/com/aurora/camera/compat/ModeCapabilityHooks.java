@@ -1,8 +1,8 @@
 package com.aurora.camera.compat;
 
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XC_MethodReplacement;
-import de.robv.android.xposed.XposedBridge;
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
+import com.aurora.camera.diagnostics.ObservedReplacement;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -39,14 +39,14 @@ public final class ModeCapabilityHooks {
         return new HookPlan() {
             public String id() { return "F04.F07.F09.F11.F17.capability-consumers"; }
             public void install() {
-                XposedBridge.hookMethod(night, XC_MethodReplacement.returnConstant(true));
-                XposedBridge.hookMethod(nightEv, new StrictHook() {
+                HookDiagnostics.hookMethod(night, ObservedReplacement.returnConstant(true));
+                HookDiagnostics.hookMethod(nightEv, new StrictHook() {
                     @Override protected void after(MethodHookParam p) {
                         // The original Pe.b.j2 initialization and errors still run.
                         if (!p.hasThrowable()) p.setResult(true);
                     }
                 });
-                XposedBridge.hookMethod(evModes, new StrictHook() {
+                HookDiagnostics.hookMethod(evModes, new StrictHook() {
                     @Override protected void before(MethodHookParam p) throws Throwable {
                         if ((Integer) p.args[0] == 173) {
                             try {
@@ -58,12 +58,12 @@ public final class ModeCapabilityHooks {
                         }
                     }
                 });
-                XposedBridge.hookMethod(hiPixel, new StrictHook() {
+                HookDiagnostics.hookMethod(hiPixel, new StrictHook() {
                     @Override protected void before(MethodHookParam p) {
                         if ((Integer) p.args[0] == 168) p.setResult(true);
                     }
                 });
-                XposedBridge.hookMethod(ai, new XC_MethodReplacement() {
+                HookDiagnostics.hookMethod(ai, new ObservedReplacement() {
                     @Override protected Object replaceHookedMethod(MethodHookParam p) throws Throwable {
                         try {
                             // The accepted patch drops only the parity branch, not the protection call.
@@ -74,7 +74,7 @@ public final class ModeCapabilityHooks {
                         }
                     }
                 });
-                XposedBridge.hookMethod(audio, new XC_MethodReplacement() {
+                HookDiagnostics.hookMethod(audio, new ObservedReplacement() {
                     @Override protected Object replaceHookedMethod(MethodHookParam p) throws Throwable {
                         try {
                             if (!(Boolean) audioMode.invoke(p.thisObject)) return false;

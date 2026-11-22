@@ -1,9 +1,9 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.util.SparseArray;
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XC_MethodReplacement;
-import de.robv.android.xposed.XposedBridge;
+import com.aurora.camera.diagnostics.ObservedReplacement;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -81,30 +81,30 @@ public final class MadridConfigHooks {
             @Override public void install() {
                 // Accepted DEX tests Aurorapro, then Aurora with an impossible AND.
                 // Thus every non-null name returns Madrid; null keeps the original NPE.
-                XposedBridge.hookMethod(selector, new StrictHook() {
+                HookDiagnostics.hookMethod(selector, new StrictHook() {
                     @Override protected void before(MethodHookParam param) {
                         if (param.args[0] != null) param.setResult(madrid);
                     }
                 });
                 for (Method method : enabled) {
-                    XposedBridge.hookMethod(method, XC_MethodReplacement.returnConstant(true));
+                    HookDiagnostics.hookMethod(method, ObservedReplacement.returnConstant(true));
                 }
-                XposedBridge.hookMethod(highResolutionName, XC_MethodReplacement.returnConstant(false));
-                XposedBridge.hookMethod(mimojiFamily, XC_MethodReplacement.returnConstant(4));
-                XposedBridge.hookMethod(shortVideoFamily, XC_MethodReplacement.returnConstant(3));
-                XposedBridge.hookMethod(countdown, XC_MethodReplacement.returnConstant(-1));
-                XposedBridge.hookMethod(modes, new XC_MethodReplacement() {
+                HookDiagnostics.hookMethod(highResolutionName, ObservedReplacement.returnConstant(false));
+                HookDiagnostics.hookMethod(mimojiFamily, ObservedReplacement.returnConstant(4));
+                HookDiagnostics.hookMethod(shortVideoFamily, ObservedReplacement.returnConstant(3));
+                HookDiagnostics.hookMethod(countdown, ObservedReplacement.returnConstant(-1));
+                HookDiagnostics.hookMethod(modes, new ObservedReplacement() {
                     @Override protected Object replaceHookedMethod(MethodHookParam param) {
                         return new int[] { 167, 256, 175, 162, 163, 171, 173, 168, 186,
                                 254, 225, 231, 232, 172, 169, 206, 191, 166 };
                     }
                 });
-                XposedBridge.hookMethod(legendaryModes, new XC_MethodReplacement() {
+                HookDiagnostics.hookMethod(legendaryModes, new ObservedReplacement() {
                     @Override protected Object replaceHookedMethod(MethodHookParam param) {
                         return new int[] { 163, 186, 162, 225, 256 };
                     }
                 });
-                XposedBridge.hookMethod(focalTable, new StrictHook() {
+                HookDiagnostics.hookMethod(focalTable, new StrictHook() {
                     @SuppressWarnings("unchecked")
                     @Override protected void after(MethodHookParam param) throws Throwable {
                         if (param.hasThrowable()) return;
@@ -116,22 +116,22 @@ public final class MadridConfigHooks {
                         result.put(135, portraitBean.newInstance(3, 135.0f, 120.0f));
                     }
                 });
-                XposedBridge.hookMethod(rearStops, new XC_MethodReplacement() {
+                HookDiagnostics.hookMethod(rearStops, new ObservedReplacement() {
                     @Override protected Object replaceHookedMethod(MethodHookParam param) {
                         return rearStops();
                     }
                 });
-                XposedBridge.hookMethod(frontStops, new XC_MethodReplacement() {
+                HookDiagnostics.hookMethod(frontStops, new ObservedReplacement() {
                     @Override protected Object replaceHookedMethod(MethodHookParam param) {
                         return frontStops();
                     }
                 });
-                XposedBridge.hookMethod(zoomRange, new XC_MethodReplacement() {
+                HookDiagnostics.hookMethod(zoomRange, new ObservedReplacement() {
                     @Override protected Object replaceHookedMethod(MethodHookParam param) {
                         return zoomRanges();
                     }
                 });
-                XposedBridge.hookMethod(motionProfile, new StrictHook() {
+                HookDiagnostics.hookMethod(motionProfile, new StrictHook() {
                     @SuppressWarnings("unchecked")
                     @Override protected void after(MethodHookParam param) throws Throwable {
                         if (param.hasThrowable()) return;
@@ -139,14 +139,14 @@ public final class MadridConfigHooks {
                         applyMotionProfile(result, beanRatios);
                     }
                 });
-                XposedBridge.hookMethod(focalCycles, new StrictHook() {
+                HookDiagnostics.hookMethod(focalCycles, new StrictHook() {
                     @SuppressWarnings("unchecked")
                     @Override protected void after(MethodHookParam param) {
                         if (param.hasThrowable()) return;
                         applyCycles((Map<Integer, SparseArray<String[]>>) param.getResult());
                     }
                 });
-                XposedBridge.hookMethod(watermark, new StrictHook() {
+                HookDiagnostics.hookMethod(watermark, new StrictHook() {
                     @SuppressWarnings("unchecked")
                     @Override protected void after(MethodHookParam param) throws Throwable {
                         if (param.hasThrowable()) return;
@@ -157,12 +157,12 @@ public final class MadridConfigHooks {
                         result.put(0, new String[] { prefix, deviceName });
                     }
                 });
-                XposedBridge.hookMethod(microfilmFamily, new StrictHook() {
+                HookDiagnostics.hookMethod(microfilmFamily, new StrictHook() {
                     @Override protected void before(MethodHookParam param) {
                         if (madrid.isInstance(param.thisObject)) param.setResult(2);
                     }
                 });
-                XposedBridge.hookMethod(microfilmEnabled, new StrictHook() {
+                HookDiagnostics.hookMethod(microfilmEnabled, new StrictHook() {
                     @Override protected void before(MethodHookParam param) {
                         if (madrid.isInstance(param.thisObject)) param.setResult(true);
                     }

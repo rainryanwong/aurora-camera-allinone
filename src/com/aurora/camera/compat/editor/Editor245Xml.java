@@ -1,5 +1,7 @@
 package com.aurora.camera.compat.editor;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.RectF;
@@ -11,7 +13,6 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 import com.aurora.camera.compat.Host;
 import com.aurora.camera.compat.StrictHook;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.*;
 import java.util.*;
 
@@ -60,10 +61,10 @@ public final class Editor245Xml {
         }
     }
     public void install() {
-        XposedBridge.hookMethod(create, new StrictHook() {
+        HookDiagnostics.hookMethod(create, new StrictHook() {
             @Override protected void after(MethodHookParam p) throws Throwable { if (!p.hasThrowable()) apply(p.thisObject, p.args[3]); }
         });
-        XposedBridge.hookMethod(update, new StrictHook() {
+        HookDiagnostics.hookMethod(update, new StrictHook() {
             @Override protected void before(MethodHookParam p) throws Throwable { restore((View)view.get(p.thisObject)); }
             @Override protected void after(MethodHookParam p) throws Throwable { if (!p.hasThrowable()) apply(p.thisObject, p.args[2]); }
         });

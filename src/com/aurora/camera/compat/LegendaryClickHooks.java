@@ -1,8 +1,8 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.view.View;
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.List;
@@ -35,7 +35,7 @@ public final class LegendaryClickHooks {
             public String id() { return "F28.legendary-card-click"; }
             public void install() {
                 try{preview.install();}catch(Exception failure){throw new IllegalStateException("M3 preview installation failed",failure);}
-                XposedBridge.hookMethod(defaultValue, new StrictHook() {
+                HookDiagnostics.hookMethod(defaultValue, new StrictHook() {
                     @Override protected void after(MethodHookParam p) {
                         // ComponentData computes this default, then reads its key using
                         // the computed fallback. Stored values retain precedence; no
@@ -45,7 +45,7 @@ public final class LegendaryClickHooks {
                         }
                     }
                 });
-                XposedBridge.hookMethod(click, new StrictHook() {
+                HookDiagnostics.hookMethod(click, new StrictHook() {
                     @Override protected void before(MethodHookParam p) throws Throwable {
                         Object owner = adapter.get(p.thisObject);
                         owner.getClass(); // The original callback also requires its captured adapter.

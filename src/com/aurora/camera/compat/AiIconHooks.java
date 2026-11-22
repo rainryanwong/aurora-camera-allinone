@@ -1,8 +1,8 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.view.View;
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Method;
 
 /** F28: keep the existing binding/animation and hide only the exact stock icon. */
@@ -19,7 +19,7 @@ public final class AiIconHooks {
         return new HookPlan() {
             public String id() { return "F28.ai-middle-icon"; }
             public void install() {
-                XposedBridge.hookMethod(bind, new StrictHook() {
+                HookDiagnostics.hookMethod(bind, new StrictHook() {
                     @Override protected void after(MethodHookParam p) {
                         if (!p.hasThrowable() && (Integer) p.args[0] == SMART_COMPOSITION_ID) {
                             View icon = (View) p.getResult();

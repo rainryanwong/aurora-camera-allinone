@@ -1,5 +1,7 @@
 package com.aurora.camera.compat.street;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
@@ -7,7 +9,6 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import com.aurora.camera.compat.Host;
 import com.aurora.camera.compat.StrictHook;
-import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -32,7 +33,7 @@ public final class StreetStyle221 {
         cv=h.field("q4.h","t");button=h.field("q4.u","T");label=h.field("q4.u","U");
     }
     public void install(){
-        XposedBridge.hookMethod(click,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(click,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
             View view=(View)p.args[0];if(view==null||view.getId()!=BUTTON||topMode.getInt(p.thisObject)!=229)return;
             Object style=get.invoke(repo.invoke(null),styleType);if(componentMode.getInt(style)!=229)return;
             Optional<?> owner=(Optional<?>)config.invoke(null);if(!owner.isPresent())return;

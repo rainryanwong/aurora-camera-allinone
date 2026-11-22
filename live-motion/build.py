@@ -14,9 +14,9 @@ STUBS = ROOT / 'api-stubs'
 KEY = Path(os.environ.get('AURORA_LSP_KEYSTORE', 'D:/cam18pm/m3-port/m3-v16-probe-debug.jks'))
 BASE = Path('D:/cam18pm/analysis/watermark-topbar-perf-20261111/static/camera1770.apk')
 BASE_SHA = 'e25b1ed5581baddd4e1d7f1ae60c1e0f1b1251645df5ba90dfbb9c42953b4a07'
-VERSION = '0.5.2'
-VERSION_CODE = 107
-WORK = ROOT / 'build-v052'
+VERSION = '0.5.3'
+VERSION_CODE = 108
+WORK = ROOT / 'build-v053'
 OUT = ROOT / f'release/6.8Cam-LiveMotion-{VERSION}.apk'
 SOURCES = list((ROOT/'src').rglob('*.java'))
 
@@ -45,7 +45,11 @@ def main():
     (tree/'AndroidManifest.xml').write_text(manifest, encoding='utf-8')
     (tree/'res/values/arrays.xml').write_text('<resources><string-array name="xposed_scope"><item>com.android.camera</item></string-array></resources>', encoding='utf-8')
     (tree/'assets/xposed_init').write_text('com.aurora.camera.livemotion.LiveMotionModule\n', encoding='utf-8')
-    files = SOURCES + list(STUBS.rglob('*.java'))
+    version_source = WORK/'BuildInfo.java'
+    version_source.write_text(
+        f'package com.aurora.camera.livemotion; final class BuildInfo {{ static final String VERSION = "{VERSION}"; }}\n',
+        encoding='utf-8')
+    files = SOURCES + list(STUBS.rglob('*.java')) + [version_source]
     run(JAVA/'javac.exe', '--release', '8', '-encoding', 'UTF-8', '-cp', SDK, '-d', WORK/'classes', *files)
     run(JAVA/'jar.exe', 'cf', WORK/'module.jar', '-C', WORK/'classes', 'com')
     run(BT/'d8.bat', '--min-api', '31', '--lib', SDK, '--output', WORK/'dex', WORK/'module.jar')
@@ -79,7 +83,7 @@ def main():
                   scope=['com.android.camera'], config_types=['2', '3', '0'],
                   signatures_verified=True, alignment_verified=True, zip_verified=True,
                   installed=False, runtime_verified=False,
-                  source_files={str(p.relative_to(ROOT)): sha(p) for p in SOURCES})
+                  source_files={str(p.relative_to(ROOT.parent)): sha(p) for p in SOURCES})
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 if __name__ == '__main__': main()

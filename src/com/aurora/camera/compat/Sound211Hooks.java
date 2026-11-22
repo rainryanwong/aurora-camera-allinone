@@ -1,7 +1,8 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.Context;
-import de.robv.android.xposed.XposedBridge;
 import java.io.InputStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -40,7 +41,7 @@ public final class Sound211Hooks {
         return new HookPlan(){
             public String id(){return "211.phoenix-shutter-sounds";}
             public void install(){
-                XposedBridge.hookMethod(play,new StrictHook(){
+                HookDiagnostics.hookMethod(play,new StrictHook(){
                     @Override protected void before(MethodHookParam p)throws Throwable{
                         if((Integer)p.args[0]!=6)return;
                         int mode=(Integer)moduleIndex.invoke(p.thisObject);if(mode!=163&&mode!=173)return;
@@ -50,7 +51,7 @@ public final class Sound211Hooks {
                         if(index((String)token.get(rows.get(position)))>=0)p.setResult(null);
                     }
                 });
-                XposedBridge.hookMethod(catalog,new StrictHook(){
+                HookDiagnostics.hookMethod(catalog,new StrictHook(){
                     @SuppressWarnings("unchecked") @Override protected void after(MethodHookParam p)throws Throwable{
                         if(p.hasThrowable())return;
                         ArrayList<Object> rows=new ArrayList<>((List<Object>)p.getResult());
@@ -60,20 +61,20 @@ public final class Sound211Hooks {
                         p.setResult(rows);
                     }
                 });
-                XposedBridge.hookMethod(init,new StrictHook(){
+                HookDiagnostics.hookMethod(init,new StrictHook(){
                     @Override protected void after(MethodHookParam p)throws Throwable{
                         if(p.hasThrowable())return;CharSequence[] names=(CharSequence[])keys.get(p.thisObject),ids=(CharSequence[])values.get(p.thisObject);
                         for(int i=0;i<ids.length;i++){int index=index(ids[i].toString());if(index>=0)names[i]=TITLES[index];}
                     }
                 });
-                XposedBridge.hookMethod(resume,new StrictHook(){
+                HookDiagnostics.hookMethod(resume,new StrictHook(){
                     @Override protected void after(MethodHookParam p)throws Throwable{
                         if(p.hasThrowable())return;List<?> rows=(List<?>)catalog.invoke(null);int pos=(Integer)selected.invoke(null);
                         if(pos<0||pos>=rows.size())return;int index=index((String)token.get(rows.get(pos)));if(index<0)return;
                         Object preference=find.invoke(group.get(p.thisObject),"custom_shutter_sound_key");if(preference!=null)text.invoke(preference,TITLES[index]);
                     }
                 });
-                XposedBridge.hookMethod(asset,new StrictHook(){
+                HookDiagnostics.hookMethod(asset,new StrictHook(){
                     @Override protected void before(MethodHookParam p)throws Throwable{
                         String path=(String)p.args[0];String style=null,suffix=null;
                         for(String id:TOKENS){String prefix="sounds/"+id+"/";if(path.startsWith(prefix)){style=id;suffix=path.substring(prefix.length());break;}}

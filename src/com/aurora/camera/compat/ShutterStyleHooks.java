@@ -1,6 +1,7 @@
 package com.aurora.camera.compat;
 
-import de.robv.android.xposed.XposedBridge;
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -55,7 +56,7 @@ public final class ShutterStyleHooks {
         return new HookPlan() {
             public String id() { return "native-shutter-style-modes"; }
             public void install() {
-                XposedBridge.hookMethod(draw, new StrictHook() {
+                HookDiagnostics.hookMethod(draw, new StrictHook() {
                     @Override protected void before(MethodHookParam p) throws Throwable {
                         int mode = drawMode.getInt(p.args[0]);
                         if (!supported(mode) || "custom_shutter_default".equals(selected.invoke(null))) return;
@@ -82,8 +83,8 @@ public final class ShutterStyleHooks {
                 };
                 // Native editor candidates come from l(); its saved first six
                 // positions become the top bar through the same 266 factory.
-                for (Method method : providers) XposedBridge.hookMethod(method, provider);
-                XposedBridge.hookMethod(available, new StrictHook() {
+                for (Method method : providers) HookDiagnostics.hookMethod(method, provider);
+                HookDiagnostics.hookMethod(available, new StrictHook() {
                     @Override protected void before(MethodHookParam p) throws Throwable {
                         int mode = (Integer) p.args[0];
                         if (!supported(mode)) return;
@@ -94,7 +95,7 @@ public final class ShutterStyleHooks {
                             editor.invoke(p.thisObject, withShutter(previous), false);
                     }
                 });
-                XposedBridge.hookMethod(editor, new StrictHook() {
+                HookDiagnostics.hookMethod(editor, new StrictHook() {
                     @Override protected void before(MethodHookParam p) throws Throwable {
                         if (!supported(menuMode.getInt(p.thisObject))) return;
                         @SuppressWarnings("unchecked") List<Integer> previous = (List<Integer>) p.args[0];

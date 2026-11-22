@@ -1,8 +1,9 @@
 package com.aurora.camera.compat.street;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import com.aurora.camera.compat.Host;
 import com.aurora.camera.compat.StrictHook;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -37,16 +38,16 @@ public final class StreetControls220 {
         if(!result.contains(SHUTTER))result.add(SHUTTER);return result;
     }
     public void install(){
-        XposedBridge.hookMethod(top,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{if(!p.hasThrowable()&&equipment.isInstance(p.thisObject))p.setResult(withShutter((List<?>)p.getResult()));}});
-        XposedBridge.hookMethod(extra,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{if(!p.hasThrowable())p.setResult(withShutter((List<?>)p.getResult()));}});
-        XposedBridge.hookMethod(migrate,new StrictHook(){@Override protected void before(MethodHookParam p){if((Integer)p.args[0]==229)p.args[1]=tokens(p.args[1]);}});
-        XposedBridge.hookMethod(editor,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{if(componentMode.getInt(p.thisObject)==229)p.args[0]=tokens(p.args[0]);}});
-        XposedBridge.hookMethod(ratioItems,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(top,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{if(!p.hasThrowable()&&equipment.isInstance(p.thisObject))p.setResult(withShutter((List<?>)p.getResult()));}});
+        HookDiagnostics.hookMethod(extra,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{if(!p.hasThrowable())p.setResult(withShutter((List<?>)p.getResult()));}});
+        HookDiagnostics.hookMethod(migrate,new StrictHook(){@Override protected void before(MethodHookParam p){if((Integer)p.args[0]==229)p.args[1]=tokens(p.args[1]);}});
+        HookDiagnostics.hookMethod(editor,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{if(componentMode.getInt(p.thisObject)==229)p.args[0]=tokens(p.args[0]);}});
+        HookDiagnostics.hookMethod(ratioItems,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
             if(p.hasThrowable()||current()!=229)return;ArrayList<Object> safe=new ArrayList<>();
             for(Object row:(List<?>)p.getResult())if(supportedRatio((String)itemValue.get(row)))safe.add(row);
             p.setResult(safe);
         }});
-        XposedBridge.hookMethod(ratioValue,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(ratioValue,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
             if(p.hasThrowable()||(Integer)p.args[0]!=229)return;String value=(String)p.getResult();
             if(supportedRatio(value)){normalized.remove(p.thisObject);return;}
             String fallback=(String)ratioDefault.invoke(p.thisObject,229);

@@ -1,5 +1,7 @@
 package com.aurora.camera.compat.filter;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.app.Activity;
 import com.aurora.camera.compat.ui.MiuixDialogs;
 import android.app.Dialog;
@@ -15,7 +17,6 @@ import android.widget.TextView;
 import com.aurora.camera.compat.Host;
 import com.aurora.camera.compat.StrictHook;
 import com.aurora.camera.compat.filter.FilterWorkspace215.Entry;
-import de.robv.android.xposed.XposedBridge;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -69,18 +70,20 @@ public final class FilterManager215 {
     }
     public void install(){
         workspace.install();
-        XposedBridge.hookMethod(settingsAdd,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(settingsAdd,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
             if(p.hasThrowable())return;Object root=group.get(p.thisObject);if(call(find,root,KEY)!=null)return;
             Object category=call(find,root,"category_advance_setting");if(category==null)throw new IllegalStateException("Laboratory category missing");
             Activity owner=(Activity)call(activity,p.thisObject);Object row=preference.newInstance(owner,null);persistent.setBoolean(row,false);prefOrder.setInt(row,-300);call(key,row,KEY);call(title,row,"滤镜管理");call(summary,row,"排序、隐藏、备份和恢复拍照与视频滤镜");
             click.set(row,java.lang.reflect.Proxy.newProxyInstance(clickType.getClassLoader(),new Class<?>[]{clickType},(proxy,m,args)->{
                 if(m.getDeclaringClass()==Object.class){if(m.getName().equals("hashCode"))return System.identityHashCode(proxy);if(m.getName().equals("equals"))return proxy==args[0];return "AuroraCamStyleManagement";}
-                openFacing(owner,workspace.frontFacing());return true;
+                if(workspace.currentMode()==164)open(owner,null);
+                else openFacing(owner,workspace.frontFacing());
+                return true;
             }));call(add,category,row);
         }});
         // Native grid keeps ALL rows so disabled presets can still be managed,
         // imported, renamed, deleted and reordered through its original actions.
-        XposedBridge.hookMethod(nativeInit,new StrictHook(){
+        HookDiagnostics.hookMethod(nativeInit,new StrictHook(){
             @Override protected void before(MethodHookParam p){workspace.enter();}
             @Override protected void after(MethodHookParam p){workspace.leave();if(p.hasThrowable())return;
                 ViewGroup root=(ViewGroup)p.args[0];Activity owner=(Activity)call(activity,p.thisObject);Object nativeWs=read(nativeWorkspace,p.thisObject);
@@ -92,17 +95,17 @@ public final class FilterManager215 {
                 button.setOnClickListener(v->open(owner,nativeWs));
             }
         });
-        XposedBridge.hookMethod(nativeResume,new StrictHook(){@Override protected void before(MethodHookParam p){workspace.enter();}@Override protected void after(MethodHookParam p){workspace.leave();}});
-        XposedBridge.hookMethod(activityResult,new StrictHook(){@Override protected void after(MethodHookParam p){
+        HookDiagnostics.hookMethod(nativeResume,new StrictHook(){@Override protected void before(MethodHookParam p){workspace.enter();}@Override protected void after(MethodHookParam p){workspace.leave();}});
+        HookDiagnostics.hookMethod(activityResult,new StrictHook(){@Override protected void after(MethodHookParam p){
             Page page=page((Activity)p.thisObject);int request=(Integer)p.args[0];if(page!=null&&page.pending==request&&(request==SAVE||request==LOAD)){page.result(request,(Integer)p.args[1],(Intent)p.args[2]);}
         }});
         // CameraPreferenceActivity normally finishes when leaving for another app.
         // Preserve its native lifecycle; suppress only that finish predicate for our SAF request.
-        XposedBridge.hookMethod(settingsStop,new StrictHook(){
+        HookDiagnostics.hookMethod(settingsStop,new StrictHook(){
             @Override protected void before(MethodHookParam p)throws Throwable{Page page=page((Activity)p.thisObject);if(page!=null&&page.pending!=0){p.setObjectExtra("217.filter.external",externalNavigation.getBoolean(p.thisObject));externalNavigation.setBoolean(p.thisObject,true);}}
             @Override protected void after(MethodHookParam p)throws Throwable{Object previous=p.getObjectExtra("217.filter.external");if(previous!=null)externalNavigation.setBoolean(p.thisObject,(Boolean)previous);}
         });
-        XposedBridge.hookMethod(destroy,new StrictHook(){@Override protected void before(MethodHookParam p){Page page=page((Activity)p.thisObject);if(page!=null)page.dialog.dismiss();}});
+        HookDiagnostics.hookMethod(destroy,new StrictHook(){@Override protected void before(MethodHookParam p){Page page=page((Activity)p.thisObject);if(page!=null)page.dialog.dismiss();}});
     }
     private Page page(Activity owner){WeakReference<Page> ref=pages.get(owner);return ref==null?null:ref.get();}
     private void openFacing(Activity owner,boolean front){try{open(owner,workspace.workspace(front));}catch(IOException e){Log.e("AuroraFilterManager","Workspace unavailable",e);dialogs.builder(owner).setTitle("滤镜工作区尚未打开").setMessage(e.getMessage()).setPositiveButton("确定",null).show();}}

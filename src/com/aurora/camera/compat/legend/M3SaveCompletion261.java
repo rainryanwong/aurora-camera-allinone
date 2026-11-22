@@ -1,5 +1,7 @@
 package com.aurora.camera.compat.legend;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -7,7 +9,6 @@ import android.net.Uri;
 import android.util.Log;
 import com.aurora.camera.compat.Host;
 import com.aurora.camera.compat.StrictHook;
-import de.robv.android.xposed.XposedBridge;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Field;
@@ -58,7 +59,7 @@ public final class M3SaveCompletion261 {
     }
 
     public void install() {
-        for (Method method : storage) XposedBridge.hookMethod(method, new StrictHook() {
+        for (Method method : storage) HookDiagnostics.hookMethod(method, new StrictHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 p.setObjectExtra(PREVIOUS, current.get());
                 Object task = p.args[0], save = taskSave.get(task);
@@ -84,7 +85,7 @@ public final class M3SaveCompletion261 {
     }
 
     private void observe(Method method, Field writer) {
-        XposedBridge.hookMethod(method, new StrictHook() {
+        HookDiagnostics.hookMethod(method, new StrictHook() {
             @Override protected void after(MethodHookParam p) throws Throwable {
                 Save save = current.get();
                 if (!p.hasThrowable() && save != null && p.getResult() != null

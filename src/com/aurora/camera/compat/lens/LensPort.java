@@ -1,5 +1,8 @@
 package com.aurora.camera.compat.lens;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+import com.aurora.camera.diagnostics.ObservedHook;
+
 import com.aurora.camera.compat.Host;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
@@ -139,7 +142,7 @@ public final class LensPort implements PhysicalLensRoute.Camera {
     }
 
     public void install() {
-        XposedBridge.hookMethod(B2resolve,new LensHook() {
+        HookDiagnostics.hookMethod(B2resolve,new LensHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 if ((int)p.args[0]!=0) return;
                 synchronized(B2resolve.getDeclaringClass()) {
@@ -171,14 +174,14 @@ public final class LensPort implements PhysicalLensRoute.Camera {
                 }
             }
         });
-        XC_MethodHook switching=new LensHook() {
+        ObservedHook switching=new LensHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 int result=route.switchLens((float)p.args[0],(float)p.args[1],p.args[2]);
                 if (result>=0) p.setResult(result!=0);
             }
         };
-        XposedBridge.hookMethod(baseSwitch,switching); XposedBridge.hookMethod(childSwitch,switching);
-        XC_MethodHook boundHook=new LensHook() {
+        HookDiagnostics.hookMethod(baseSwitch,switching); HookDiagnostics.hookMethod(childSwitch,switching);
+        ObservedHook boundHook=new LensHook() {
             @Override protected void before(MethodHookParam p) {
                 BoundsCall call=new BoundsCall(bounding.get()); bounding.set(call); p.setObjectExtra(PREVIOUS,call);
             }
@@ -193,13 +196,13 @@ public final class LensPort implements PhysicalLensRoute.Camera {
                 } finally { if (call.previous==null) bounding.remove(); else bounding.set(call.previous); }
             }
         };
-        XposedBridge.hookMethod(baseBounds,boundHook); XposedBridge.hookMethod(childBounds,boundHook);
-        XposedBridge.hookMethod(professionalSwitch,new LensHook() {
+        HookDiagnostics.hookMethod(baseBounds,boundHook); HookDiagnostics.hookMethod(childBounds,boundHook);
+        HookDiagnostics.hookMethod(professionalSwitch,new LensHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 p.setResult(switchProfessional((float)p.args[0],(float)p.args[1],(int)p.args[2],(int)p.args[3],p.args[4]));
             }
         });
-        XposedBridge.hookMethod(inheritedZoom,new LensHook() {
+        HookDiagnostics.hookMethod(inheritedZoom,new LensHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 if (!professionalZoom.isInstance(p.thisObject)) return;
                 Optional<?> capture=(Optional<?>)specialCapture.invoke(null);
@@ -212,15 +215,15 @@ public final class LensPort implements PhysicalLensRoute.Camera {
                 if (switchProfessional((float)p.args[1],(float)p.args[2],(int)p.args[0],capabilitiesId.getInt(caps),module)) p.setResult(true);
             }
         });
-        XposedBridge.hookMethod(lensMap,new LensHook() {
+        HookDiagnostics.hookMethod(lensMap,new LensHook() {
             @Override @SuppressWarnings("unchecked") protected void after(MethodHookParam p) throws Throwable {
                 if (!p.hasThrowable()) completeProLens((LinkedHashMap<String,Object>)lensEntries.get(p.getResult()),(int)p.args[0]);
             }
         });
-        XposedBridge.hookMethod(validLens,new LensHook() {
+        HookDiagnostics.hookMethod(validLens,new LensHook() {
             @Override protected void before(MethodHookParam p) { if ("Standalone".equals(p.args[1])) p.setResult(true); }
         });
-        XposedBridge.hookMethod(cameraSegments,new LensHook() {
+        HookDiagnostics.hookMethod(cameraSegments,new LensHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 p.setObjectExtra(PREVIOUS,segmentModule.get());
                 segmentModule.set(p.args[0]);
@@ -229,25 +232,25 @@ public final class LensPort implements PhysicalLensRoute.Camera {
                 Object previous=p.getObjectExtra(PREVIOUS); if (previous==null) segmentModule.remove(); else segmentModule.set(previous);
             }
         });
-        XposedBridge.hookMethod(highPixel,new LensHook() {
+        HookDiagnostics.hookMethod(highPixel,new LensHook() {
             @Override protected void before(MethodHookParam p) {
                 if (segmentModule.get()!=null && (int)p.args[0]==175 && caller.matches(highPixel,cameraSegments)) p.setResult(false);
             }
         });
-        XposedBridge.hookMethod(segmentsNative,new LensHook() {
+        HookDiagnostics.hookMethod(segmentsNative,new LensHook() {
             @Override @SuppressWarnings("unchecked") protected void after(MethodHookParam p) throws Throwable {
                 Object camera=segmentModule.get();
                 if (camera!=null && !p.hasThrowable() && caller.matches(segmentsNative,cameraSegments))
                     completeProStops((ArrayList<Float>)gripStops.get(dataZoom.cameraGrip(camera)),(int)p.args[1]);
             }
         });
-        XposedBridge.hookMethod(cameraProtocols,new LensHook() {
+        HookDiagnostics.hookMethod(cameraProtocols,new LensHook() {
             @Override protected void before(MethodHookParam p) { p.setObjectExtra(PREVIOUS,registering.get()); registering.set(true); }
             @Override protected void after(MethodHookParam p) {
                 Boolean old=(Boolean)p.getObjectExtra(PREVIOUS); if (old==null) registering.remove(); else registering.set(old);
             }
         });
-        XposedBridge.hookMethod(registerProtocols,new LensHook() {
+        HookDiagnostics.hookMethod(registerProtocols,new LensHook() {
             @Override protected void before(MethodHookParam p) {
                 if (!Boolean.TRUE.equals(registering.get()) || !Arrays.equals((Class<?>[])p.args[0],baseProtocols)) return;
                 Class<?>[] next=Arrays.copyOf(baseProtocols,7); next[6]=extraProtocol; p.args[0]=next;

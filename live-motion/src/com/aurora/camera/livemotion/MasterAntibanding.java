@@ -1,10 +1,12 @@
 package com.aurora.camera.livemotion;
 
+import com.aurora.camera.diagnostics.ObservedHook;
+
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.hardware.camera2.CaptureRequest;
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -50,16 +52,16 @@ final class MasterAntibanding {
     }
 
     void install() {
-        XposedBridge.hookMethod(update, new XC_MethodHook() {
-            @Override protected void beforeHookedMethod(MethodHookParam p) throws Throwable {
+        HookDiagnostics.hookMethod(update, new ObservedHook() {
+            @Override protected void runBefore(MethodHookParam p) throws Throwable {
                 if (master.isInstance(p.thisObject) && preferences.getBoolean(KEY, false)
                         && "2".equals(type.invoke(null, 231))) {
                     p.args[0] = HZ_50;
                 }
             }
         });
-        XposedBridge.hookMethod(register, new XC_MethodHook() {
-            @Override protected void afterHookedMethod(MethodHookParam p) throws Throwable {
+        HookDiagnostics.hookMethod(register, new ObservedHook() {
+            @Override protected void runAfter(MethodHookParam p) throws Throwable {
                 if (!p.hasThrowable()) addPreference(p.thisObject);
             }
         });

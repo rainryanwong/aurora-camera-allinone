@@ -1,7 +1,8 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.os.Bundle;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -27,9 +28,9 @@ public final class Settings211Hooks {
         return new HookPlan() {
             public String id(){return "211.laboratory-and-watermark-tabs";}
             public void install(){
-                XposedBridge.hookMethod(settings,enter(scope,1));
-                XposedBridge.hookMethod(gallery,enter(scope,2));
-                XposedBridge.hookMethod(append,new StrictHook(){
+                HookDiagnostics.hookMethod(settings,enter(scope,1));
+                HookDiagnostics.hookMethod(gallery,enter(scope,2));
+                HookDiagnostics.hookMethod(append,new StrictHook(){
                     @Override protected void before(MethodHookParam p){
                         if(Integer.valueOf(2).equals(scope.get())&&p.args[2]==video)p.setResult(-1);
                     }

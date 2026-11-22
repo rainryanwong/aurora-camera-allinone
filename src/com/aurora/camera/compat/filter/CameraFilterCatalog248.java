@@ -76,8 +76,7 @@ public final class CameraFilterCatalog248 {
         }
     }
     public List<LutShare246.ExportItem> snapshot(Context context)throws Exception{
-        Map<File,String> revisions=new HashMap<>();
-        List<LutShare246.ExportItem> out=new ArrayList<>(CameraLutCatalog246.snapshot(context,revisions));
+        List<LutShare246.ExportItem> out=new ArrayList<>(CameraLutCatalog246.snapshot(context));
         LutStore229 store=new LutStore229(context);Map<String,?> preferences=context.getSharedPreferences("aurora_luts229",0).getAll();
         // Existing pure cube rows stay unchanged unless this user explicitly saved extra effects.
         for(int index=0;index<out.size();index++){
@@ -94,14 +93,14 @@ public final class CameraFilterCatalog248 {
                 String key=((Enum<?>)enums[ordinal]).name();if("N_ORIGINAL".equals(key)||dynamicSlot(key)>0||"LEICA".equals(rowGroup.get(row))||!seen.add(key))continue;
                 if(!preferences.containsKey("label:"+key)&&!preferences.containsKey("effect:"+key))continue;
                 int resource=rowLabel.getInt(row);if(resource<=0)continue;String name=store.label(key,context.getString(resource));
-                add(out,"native_"+key,name,base(context,id,enums,bases),new int[8],false,revisions);
+                add(out,"native_"+key,name,base(context,id,enums,bases),new int[8],false);
             }
         }
         Map<String,Set<String>> hidden=new HashMap<>();
         for(String kind:new String[]{"MiCamStyleRear","MiCamStyleFront"})hidden.put(kind,context.getSharedPreferences("aurora_filter_workspace_v2",0).getStringSet("hidden:"+kind,Collections.emptySet()));
         for(RecipeCatalog219.Recipe recipe:RecipeCatalog219.scan(new File(context.getFilesDir(),"Workspace"),hidden)){
             String key=LutStore229.recipeKey(recipe.kind,recipe.id);int[] style=recipe.colors.clone(),edited=store.effects(key);if(edited!=null)applyEdits(style,edited);
-            add(out,"recipe_"+hash(recipe.identity()),store.label(key,recipe.name),base(context,recipe.filter,enums,bases),style,edited!=null,revisions);
+            add(out,"recipe_"+hash(recipe.identity()),store.label(key,recipe.name),base(context,recipe.filter,enums,bases),style,edited!=null);
         }
         if(!preferences.equals(context.getSharedPreferences("aurora_luts229",0).getAll()))throw new IOException("Camera filter customization changed during export");
         Map<String,Integer> ranks=new HashMap<>();
@@ -129,11 +128,15 @@ public final class CameraFilterCatalog248 {
         if(edited.length!=2||edited[0]<0||edited[0]>3||edited[1]<0||edited[1]>2)throw new IOException("Invalid saved camera effects");
         style[5]=LutStore229.styleNoise(edited[0]);style[6]=LutStore229.styleSoftLight(edited[1]);
     }
-    private static void add(List<LutShare246.ExportItem> out,String id,String name,Base base,int[] style,boolean edited,Map<File,String> revisions)throws IOException{
+    private static void add(List<LutShare246.ExportItem> out,String id,String name,Base base,int[] style,boolean edited){
         float[] values=base.values.clone();int flags=base.flags;
         // A saved recipe override owns StyleAdjust grain/mist and disables the LUT noise/mist stages.
         if(edited){values[4]=0;flags&=~LUT_EFFECTS;}
-        out.add(new LutShare246.ExportItem(new LutShare246.Row(id,name,CameraLutCatalog246.revision(base.png,revisions),out.size(),new Recipe248(base.original,flags,values,style)),base.png));
+        // Both publishers name their private PNGs with the hash computed when writing them.
+        // The provider still verifies the bytes it receives on publication.
+        String pngName=base.png.getName();
+        String revision=pngName.substring(0,pngName.length()-".png".length());
+        out.add(new LutShare246.ExportItem(new LutShare246.Row(id,name,revision,out.size(),new Recipe248(base.original,flags,values,style)),base.png));
     }
     private static int dynamicSlot(String name){
         if(!name.startsWith(DYNAMIC_PREFIX))return 0;

@@ -1,9 +1,10 @@
 package com.aurora.camera.compat.filter;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.view.View;
 import com.aurora.camera.compat.Host;
 import com.aurora.camera.compat.StrictHook;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.List;
@@ -29,20 +30,20 @@ final class DynamicFilterLabels257 {
     }
     void install(){
         // I.m otherwise clears l == -1 rows, even though d.u reads their o name.
-        XposedBridge.hookMethod(bind,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(bind,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
             String name=name(p.args[0]);if(name==null)return;
             label.invoke(p.thisObject,name);p.setResult(null);
         }});
         // Both normal binding and selecting a row call x. Use its native
         // string-name counterpart, including the selected announcement.
-        XposedBridge.hookMethod(accessibility,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(accessibility,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
             View item=(View)p.args[0];if(item==null||!(item.getTag() instanceof Integer))return;
             Object row=((List<?>)adapterRows.get(p.thisObject)).get((Integer)item.getTag());
             String name=name(row);if(name==null)return;
             describe.invoke(null,item,name,adapterOwner.get(p.thisObject),(Boolean)p.args[2]);p.setResult(null);
         }});
         // Zs resets the previous row directly, without going through x.
-        XposedBridge.hookMethod(selection,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(selection,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
             if(p.hasThrowable())return;
             List<?> rows=(List<?>)panelRows.get(p.thisObject);int previous=(Integer)p.args[0];
             Object list=panelView.get(p.thisObject);if(rows==null||list==null||previous<0||previous>=rows.size()||previous==(Integer)p.args[1])return;

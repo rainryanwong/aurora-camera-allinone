@@ -1,8 +1,9 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.os.Bundle;
 import com.android.camera.port.AuroraWatermarkName;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Method;
 
 /** The existing native settings fragment is reused only in our marked internal page. */
@@ -26,15 +27,15 @@ public final class Watermark217Hooks {
         return new HookPlan(){
             public String id(){return "217.watermark-model-and-special-rendering";}
             public void install(){
-                XposedBridge.hookMethod(capture,new StrictHook(){@Override protected void after(MethodHookParam p){if(!p.hasThrowable())AuroraWatermarkName.install(p.thisObject);}});
-                XposedBridge.hookMethod(populate,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{if(AuroraWatermarkName.own(p.thisObject)){AuroraWatermarkName.populatePage(p.thisObject);p.setResult(null);}}});
-                XposedBridge.hookMethod(register,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{if(AuroraWatermarkName.own(p.thisObject))p.setResult(null);}});
-                XposedBridge.hookMethod(resume,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{if(p.hasThrowable())return;if(AuroraWatermarkName.own(p.thisObject))AuroraWatermarkName.resumePage(p.thisObject);else if(captureType.isInstance(p.thisObject))AuroraWatermarkName.install(p.thisObject);}});
-                XposedBridge.hookMethod(clicked,new StrictHook(){@Override protected void before(MethodHookParam p){if(captureType.isInstance(p.thisObject)&&AuroraWatermarkName.onPreferenceClick(p.thisObject,p.args[0]))p.setResult(true);}});
-                XposedBridge.hookMethod(back,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{if(AuroraWatermarkName.back((android.app.Activity)p.thisObject))p.setResult(null);}});
+                HookDiagnostics.hookMethod(capture,new StrictHook(){@Override protected void after(MethodHookParam p){if(!p.hasThrowable())AuroraWatermarkName.install(p.thisObject);}});
+                HookDiagnostics.hookMethod(populate,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{if(AuroraWatermarkName.own(p.thisObject)){AuroraWatermarkName.populatePage(p.thisObject);p.setResult(null);}}});
+                HookDiagnostics.hookMethod(register,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{if(AuroraWatermarkName.own(p.thisObject))p.setResult(null);}});
+                HookDiagnostics.hookMethod(resume,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{if(p.hasThrowable())return;if(AuroraWatermarkName.own(p.thisObject))AuroraWatermarkName.resumePage(p.thisObject);else if(captureType.isInstance(p.thisObject))AuroraWatermarkName.install(p.thisObject);}});
+                HookDiagnostics.hookMethod(clicked,new StrictHook(){@Override protected void before(MethodHookParam p){if(captureType.isInstance(p.thisObject)&&AuroraWatermarkName.onPreferenceClick(p.thisObject,p.args[0]))p.setResult(true);}});
+                HookDiagnostics.hookMethod(back,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{if(AuroraWatermarkName.back((android.app.Activity)p.thisObject))p.setResult(null);}});
                 variants.install();
                 StrictHook prepare=new StrictHook(){@Override protected void before(MethodHookParam p){AuroraWatermarkName.prepare(p.thisObject);}};
-                XposedBridge.hookMethod(serialize,prepare);XposedBridge.hookMethod(preview,prepare);
+                HookDiagnostics.hookMethod(serialize,prepare);HookDiagnostics.hookMethod(preview,prepare);
                 com.aurora.camera.features.watermark.WatermarkModule.install(h);
             }
         };

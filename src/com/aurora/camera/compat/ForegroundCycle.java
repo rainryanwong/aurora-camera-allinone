@@ -23,8 +23,9 @@ final class ForegroundCycle {
     private Object releasedManager;
     private boolean issued;
     private boolean resumed;
-    private boolean nativeOpenObserved;
-    private boolean fallbackQueued;
+    private boolean reopenRequested;
+    private int reopenCamera;
+    private int reopenMode;
     private String origin;
 
     synchronized long enter(Object activity, String source) {
@@ -37,8 +38,8 @@ final class ForegroundCycle {
         releasedManager = null;
         issued = false;
         resumed = false;
-        nativeOpenObserved = false;
-        fallbackQueued = false;
+        reopenRequested = false;
+        reopenCamera = -1;
         origin = source;
         return epoch;
     }
@@ -69,25 +70,32 @@ final class ForegroundCycle {
     }
 
     synchronized long nativeOpenSeen() {
-        if (!pending()) return 0;
-        nativeOpenObserved = true;
-        return epoch;
+        return pending() ? epoch : 0;
     }
 
-    synchronized boolean mayNeedFallback(long expectedEpoch) {
-        return active && owner.get() != null && !consumed && !nativeOpenObserved
-            && !fallbackQueued && expectedEpoch == epoch;
+    synchronized boolean awaitingPreview(long expectedEpoch) {
+        return active && resumed && owner.get() != null && !reopenRequested && expectedEpoch == epoch;
     }
 
-    synchronized boolean claimFallback(long expectedEpoch, Object activity) {
-        if (!mayNeedFallback(expectedEpoch) || !resumed || owner.get() != activity) return false;
-        fallbackQueued = true;
+    synchronized boolean requestReopen(long expectedEpoch, Object activity, int camera, int mode) {
+        if (!awaitingPreview(expectedEpoch) || owner.get() != activity) return false;
+        reopenRequested = true;
+        reopenCamera = camera;
+        reopenMode = mode;
         return true;
     }
 
-    synchronized boolean canRunFallback(long expectedEpoch, Object activity) {
-        return active && resumed && owner.get() == activity && !consumed
-            && !nativeOpenObserved && fallbackQueued && expectedEpoch == epoch;
+    synchronized long takeReopen(int camera, int mode) {
+        if (!active || !reopenRequested || reopenCamera < 0) return 0;
+        boolean matches = reopenCamera == camera && reopenMode == mode;
+        reopenCamera = -1;
+        if (!matches) return 0;
+        consumed = true;
+        return epoch;
+    }
+
+    synchronized void cancelReopen(long expectedEpoch) {
+        if (expectedEpoch == epoch) reopenCamera = -1;
     }
 
     synchronized long activeEpoch() {
@@ -114,6 +122,8 @@ final class ForegroundCycle {
         issued = false;
         cleanRelease = false;
         releasedManager = null;
+        reopenRequested = true;
+        reopenCamera = -1;
     }
 
     synchronized Ticket open(Object manager, boolean rear, long expectedEpoch) {

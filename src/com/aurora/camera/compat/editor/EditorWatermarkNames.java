@@ -1,9 +1,10 @@
 package com.aurora.camera.compat.editor;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import com.aurora.camera.compat.Host;
 import com.aurora.camera.compat.StrictHook;
 import com.aurora.camera.features.watermark.WatermarkLabels;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -47,7 +48,7 @@ public final class EditorWatermarkNames {
     }
 
     public void install() {
-        XposedBridge.hookMethod(configure, new StrictHook() {
+        HookDiagnostics.hookMethod(configure, new StrictHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 // The maker reads both names while building text and artwork nodes.
                 // Its auxiliary argument is shared with edit/save operations, so

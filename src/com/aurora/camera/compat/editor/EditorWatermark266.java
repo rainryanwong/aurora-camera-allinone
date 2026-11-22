@@ -1,5 +1,7 @@
 package com.aurora.camera.compat.editor;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -8,7 +10,6 @@ import android.graphics.PorterDuff;
 import com.aurora.camera.compat.Host;
 import com.aurora.camera.compat.StrictHook;
 import com.aurora.camera.features.watermark.WatermarkFonts217;
-import de.robv.android.xposed.XposedBridge;
 import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -74,12 +75,12 @@ public final class EditorWatermark266 {
     }
 
     public void install(java.util.function.BooleanSupplier sampleCover) {
-        XposedBridge.hookMethod(configureModel,new StrictHook() {
+        HookDiagnostics.hookMethod(configureModel,new StrictHook() {
             @Override protected void after(MethodHookParam p) {
                 if(!p.hasThrowable())modelNames.put(p.thisObject,(String)p.args[1]);
             }
         });
-        XposedBridge.hookMethod(renderTree,new StrictHook() {
+        HookDiagnostics.hookMethod(renderTree,new StrictHook() {
             @Override protected void before(MethodHookParam p) {
                 p.setObjectExtra(PREVIOUS+".name",originalName.get());
                 originalName.set(modelNames.get(p.args[5]));
@@ -89,7 +90,7 @@ public final class EditorWatermark266 {
                 if(previous==null)originalName.remove();else originalName.set(previous);
             }
         });
-        XposedBridge.hookMethod(product,new StrictHook() {
+        HookDiagnostics.hookMethod(product,new StrictHook() {
             @Override protected void after(MethodHookParam p) throws Throwable {
                 if(p.hasThrowable()||p.getResult()==null)return;
                 String name=model((String)p.args[nativeCloud?0:1]);
@@ -100,7 +101,7 @@ public final class EditorWatermark266 {
                 version.set(parsed,"Ti");
             }
         });
-        XposedBridge.hookMethod(image,new StrictHook() {
+        HookDiagnostics.hookMethod(image,new StrictHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 p.setObjectExtra(PREVIOUS,artwork.get());artwork.remove();
                 if(sampleCover.getAsBoolean() || !"logo".equals(nodeId.invoke(p.args[1])))return;
@@ -119,7 +120,7 @@ public final class EditorWatermark266 {
                 if(previous==null)artwork.remove();else artwork.set(previous);
             }
         });
-        XposedBridge.hookMethod(load,new StrictHook() {
+        HookDiagnostics.hookMethod(load,new StrictHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 Artwork current=artwork.get();if(current==null)return;
                 String path=(String)p.args[0];

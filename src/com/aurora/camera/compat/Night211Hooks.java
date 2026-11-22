@@ -1,8 +1,9 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.util.SparseArray;
 import com.aurora.camera.compat.night.NightCamStyle213;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -31,7 +32,7 @@ public final class Night211Hooks {
             public String id(){return "211.night-aperture-and-filters";}
             public void install(){
                 camStyle.install();
-                XposedBridge.hookMethod(cloud,new StrictHook(){
+                HookDiagnostics.hookMethod(cloud,new StrictHook(){
                     @SuppressWarnings("unchecked") @Override protected void before(MethodHookParam p){
                         if((Integer)p.args[0]!=173||!captureFilter.isInstance(p.thisObject))return;
                         // The native lookup otherwise misses 173 and falls back to the small
@@ -43,7 +44,7 @@ public final class Night211Hooks {
                         HashMap<Integer,Object> catalog=new HashMap<>(original);catalog.put(173,photo);p.args[1]=catalog;
                     }
                 });
-                XposedBridge.hookMethod(initialize,new StrictHook(){
+                HookDiagnostics.hookMethod(initialize,new StrictHook(){
                     @SuppressWarnings("unchecked") @Override protected void after(MethodHookParam p)throws Throwable{
                         if(p.hasThrowable()||mode.getInt(p.thisObject)!=173)return;
                         List<Object> previous=(List<Object>)items.get(p.thisObject);ArrayList<Object> rows=new ArrayList<>(previous);
@@ -64,20 +65,20 @@ public final class Night211Hooks {
                         for(Object row:rows)if(id.getInt(row)==target)return;rows.add(build.invoke(null,target));
                     }
                 };
-                XposedBridge.hookMethod(top,configRows);XposedBridge.hookMethod(extra,configRows);
-                XposedBridge.hookMethod(floating,new StrictHook(){
+                HookDiagnostics.hookMethod(top,configRows);HookDiagnostics.hookMethod(extra,configRows);
+                HookDiagnostics.hookMethod(floating,new StrictHook(){
                     @SuppressWarnings("unchecked") @Override protected void after(MethodHookParam p)throws Throwable{
                         if(p.hasThrowable())return;ArrayList<Object> result=new ArrayList<>((List<Object>)p.getResult());
                         result.add(camStyle.bottom(factory.get(p.thisObject)));p.setResult(result);
                     }
                 });
-                XposedBridge.hookMethod(menu,new StrictHook(){
+                HookDiagnostics.hookMethod(menu,new StrictHook(){
                     @SuppressWarnings("unchecked") @Override protected void before(MethodHookParam p)throws Throwable{
                         if((Integer)p.args[0]!=173)return;ArrayList<Integer> available=(ArrayList<Integer>)p.args[1];
                         if(supported.getBoolean(get.invoke(repository.invoke(null),aperture))&&!available.contains(0xd40))available.add(0xd40);
                     }
                 });
-                XposedBridge.hookMethod(editor,new StrictHook(){
+                HookDiagnostics.hookMethod(editor,new StrictHook(){
                     @SuppressWarnings("unchecked") @Override protected void before(MethodHookParam p)throws Throwable{
                         if(mode.getInt(p.thisObject)!=173)return;
                         // Y also constructs candidates directly from native/cached tokens,

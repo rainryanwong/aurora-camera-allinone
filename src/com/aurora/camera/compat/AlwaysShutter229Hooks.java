@@ -1,11 +1,12 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.media.AudioAttributes;
 import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
 import android.media.AudioTrack;
 import android.util.Log;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Collections;
@@ -34,25 +35,25 @@ public final class AlwaysShutter229Hooks {
                 return chosen;
             }
             public void install(){
-                XposedBridge.hookMethod(setting,new StrictHook(){@Override protected void after(MethodHookParam p){if(!p.hasThrowable())options.addSwitch(p.thisObject,Options229.SOUND,"始终开启快门声","忽略系统静音；连接蓝牙或有线耳机时仅在耳机播放","pref_camerasound_key",null);}});
-                XposedBridge.hookMethod(moduleSound,new StrictHook(){@Override protected void before(MethodHookParam p){p.setObjectExtra("229.sound.module",module.get());module.set(options.enabled(Options229.SOUND)&&shutter((Integer)p.args[0]));}@Override protected void after(MethodHookParam p){Boolean prior=(Boolean)p.getObjectExtra("229.sound.module");if(prior==null)module.remove();else module.set(prior);}});
-                XposedBridge.hookMethod(gate,new StrictHook(){@Override protected void after(MethodHookParam p){if(!p.hasThrowable()&&Boolean.TRUE.equals(module.get()))p.setResult(true);}});
-                XposedBridge.hookMethod(accept,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
+                HookDiagnostics.hookMethod(setting,new StrictHook(){@Override protected void after(MethodHookParam p){if(!p.hasThrowable())options.addSwitch(p.thisObject,Options229.SOUND,"始终开启快门声","忽略系统静音；连接蓝牙或有线耳机时仅在耳机播放","pref_camerasound_key",null);}});
+                HookDiagnostics.hookMethod(moduleSound,new StrictHook(){@Override protected void before(MethodHookParam p){p.setObjectExtra("229.sound.module",module.get());module.set(options.enabled(Options229.SOUND)&&shutter((Integer)p.args[0]));}@Override protected void after(MethodHookParam p){Boolean prior=(Boolean)p.getObjectExtra("229.sound.module");if(prior==null)module.remove();else module.set(prior);}});
+                HookDiagnostics.hookMethod(gate,new StrictHook(){@Override protected void after(MethodHookParam p){if(!p.hasThrowable()&&Boolean.TRUE.equals(module.get()))p.setResult(true);}});
+                HookDiagnostics.hookMethod(accept,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
                     p.setObjectExtra("229.sound.dispatch",dispatch.get());
                     if(variant.getInt(p.thisObject)==0&&soundEvent.isInstance(p.args[0])&&shutter(event.getInt(p.args[0]))&&options.enabled(Options229.SOUND))dispatch.set(true);
                 }@Override protected void after(MethodHookParam p){Boolean prior=(Boolean)p.getObjectExtra("229.sound.dispatch");if(prior==null)dispatch.remove();else dispatch.set(prior);}});
-                XposedBridge.hookMethod(ringer,new StrictHook(){@Override protected void before(MethodHookParam p){if(Boolean.TRUE.equals(dispatch.get()))p.setResult(AudioManager.RINGER_MODE_NORMAL);}});
-                XposedBridge.hookMethod(load,new StrictHook(){@Override protected void before(MethodHookParam p){
+                HookDiagnostics.hookMethod(ringer,new StrictHook(){@Override protected void before(MethodHookParam p){if(Boolean.TRUE.equals(dispatch.get()))p.setResult(AudioManager.RINGER_MODE_NORMAL);}});
+                HookDiagnostics.hookMethod(load,new StrictHook(){@Override protected void before(MethodHookParam p){
                     p.setObjectExtra("229.sound.loading",loading.get());p.setObjectExtra("229.sound.route",route.get());
                     if(options.enabled(Options229.SOUND)&&shutter((Integer)p.args[0])){loading.set(true);route.set(output());}
                 }@Override protected void after(MethodHookParam p){Boolean prior=(Boolean)p.getObjectExtra("229.sound.loading");if(prior==null)loading.remove();else loading.set(prior);AudioDeviceInfo device=(AudioDeviceInfo)p.getObjectExtra("229.sound.route");if(device==null)route.remove();else route.set(device);}});
-                XposedBridge.hookMethod(legacy,new StrictHook(){@Override protected void before(MethodHookParam p){if(Boolean.TRUE.equals(loading.get()))p.args[0]=route.get()==null?7:AudioManager.STREAM_MUSIC;}});
-                XposedBridge.hookMethod(build,new StrictHook(){@Override protected void after(MethodHookParam p){
+                HookDiagnostics.hookMethod(legacy,new StrictHook(){@Override protected void before(MethodHookParam p){if(Boolean.TRUE.equals(loading.get()))p.args[0]=route.get()==null?7:AudioManager.STREAM_MUSIC;}});
+                HookDiagnostics.hookMethod(build,new StrictHook(){@Override protected void after(MethodHookParam p){
                     if(p.hasThrowable()||!Boolean.TRUE.equals(loading.get())||route.get()==null)return;
                     AudioTrack track=(AudioTrack)p.getResult();if(!track.setPreferredDevice(route.get())){track.release();throw new IllegalStateException("Cannot route shutter to connected headphones");}
                     Log.i("AuroraCameraCompat","shutter229 headphone route="+route.get().getId()+" type="+route.get().getType());
                 }});
-                XposedBridge.hookMethod(play,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
+                HookDiagnostics.hookMethod(play,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
                     int id=(Integer)p.args[1];if(!shutter(id))return;
                     boolean on=options.enabled(Options229.SOUND);AudioDeviceInfo device=on?output():null;int next=on?(device==null?-2:device.getId()):-1;
                     Map<Integer,Integer> known; synchronized(routes){known=routes.computeIfAbsent(p.thisObject,k->new java.util.HashMap<>());}

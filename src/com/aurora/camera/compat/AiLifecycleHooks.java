@@ -1,11 +1,11 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -50,7 +50,7 @@ public final class AiLifecycleHooks {
             public void install() {
                 final Handler main = new Handler(Looper.getMainLooper());
                 final ThreadLocal<AcceptFrame> frames = new ThreadLocal<>();
-                XposedBridge.hookMethod(accept, new StrictHook() {
+                HookDiagnostics.hookMethod(accept, new StrictHook() {
                     @Override protected void before(MethodHookParam p) {
                         AcceptFrame frame = new AcceptFrame(p.thisObject, p.args[0], frames.get());
                         p.setObjectExtra(SCOPE, frame); frames.set(frame);
@@ -60,7 +60,7 @@ public final class AiLifecycleHooks {
                         if (frame.previous == null) frames.remove(); else frames.set(frame.previous);
                     }
                 });
-                XposedBridge.hookMethod(manager, new StrictHook() {
+                HookDiagnostics.hookMethod(manager, new StrictHook() {
                     @Override protected void after(MethodHookParam p) throws Throwable {
                         AcceptFrame frame = frames.get();
                         if (frame != null && !frame.bound && !p.hasThrowable()) {
@@ -70,7 +70,7 @@ public final class AiLifecycleHooks {
                         }
                     }
                 });
-                XposedBridge.hookMethod(fragmentMode, new StrictHook() {
+                HookDiagnostics.hookMethod(fragmentMode, new StrictHook() {
                     @Override protected void before(MethodHookParam p) {
                         AcceptFrame frame = frames.get();
                         if (frame == null || frame.owner != p.thisObject
@@ -82,7 +82,7 @@ public final class AiLifecycleHooks {
                         frame.bound = true;
                     }
                 });
-                XposedBridge.hookMethod(inactive, new StrictHook() {
+                HookDiagnostics.hookMethod(inactive, new StrictHook() {
                     @Override protected void before(MethodHookParam p) {
                         final Binding binding;
                         synchronized (p.thisObject) {

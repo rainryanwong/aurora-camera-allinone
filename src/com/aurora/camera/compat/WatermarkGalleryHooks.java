@@ -1,10 +1,11 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.ColorSpace;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -42,9 +43,9 @@ public final class WatermarkGalleryHooks {
         return new HookPlan() {
             public String id() { return "watermark-gallery-thumbnails"; }
             public void install() {
-                XposedBridge.hookMethod(load, scope(loadOwner, context, preference, manager, photoManager, height));
-                XposedBridge.hookMethod(update, scope(updateOwner, context, preference, manager, photoManager, height));
-                XposedBridge.hookMethod(rasterize, new StrictHook() {
+                HookDiagnostics.hookMethod(load, scope(loadOwner, context, preference, manager, photoManager, height));
+                HookDiagnostics.hookMethod(update, scope(updateOwner, context, preference, manager, photoManager, height));
+                HookDiagnostics.hookMethod(rasterize, new StrictHook() {
                     @Override protected void before(MethodHookParam p) throws Throwable {
                         Integer target = height.get();
                         if (target == null || !coverRoot.isInstance(p.args[0])) return;

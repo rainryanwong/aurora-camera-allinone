@@ -3,6 +3,7 @@ package com.aurora.camera.compat;
 import android.os.Build;
 import android.os.ParcelFileDescriptor;
 import android.util.Log;
+import com.aurora.camera.diagnostics.HookDiagnostics;
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.IXposedHookZygoteInit;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
@@ -38,8 +39,12 @@ public final class CompatModule implements IXposedHookLoadPackage, IXposedHookZy
             Log.i(TAG, "load callback already handled; state=" + state);
             return;
         }
+        if (lp.appInfo != null && lp.appInfo.dataDir != null) {
+            HookDiagnostics.start(lp.appInfo.dataDir, "compat", BuildInfo.VERSION);
+        }
         if (!"aurora".equals(Build.DEVICE)) {
             state = State.FAILED;
+            HookDiagnostics.resolutionFailed(new IllegalStateException("Unsupported device " + Build.DEVICE));
             Log.e(TAG, "unsupported device=" + Build.DEVICE + "; no hooks installed");
             return;
         }
@@ -53,6 +58,7 @@ public final class CompatModule implements IXposedHookLoadPackage, IXposedHookZy
             String actualSha = HostApkIdentity.verify(lp.appInfo.sourceDir, lp.appInfo.dataDir, STOCK_SHA256);
             if (!STOCK_SHA256.equals(actualSha)) {
                 state = State.FAILED;
+                HookDiagnostics.resolutionFailed(new IllegalStateException("Unsupported camera APK " + actualSha));
                 Log.e(TAG, "unsupported source APK sha256=" + actualSha
                         + "; expected stock 1770; no hooks installed");
                 return;
@@ -63,10 +69,11 @@ public final class CompatModule implements IXposedHookLoadPackage, IXposedHookZy
             // Delayed resource reads must use the same APK as the hooks in this process.
             moduleArchive = ParcelFileDescriptor.open(new File(moduleApkPath), ParcelFileDescriptor.MODE_READ_ONLY);
             Host host = new Host(lp.classLoader, "/proc/self/fd/" + moduleArchive.getFd());
-            plans = FeatureRegistry.resolve(host);
+            plans = FeatureRegistry.resolve(host, lp.appInfo.dataDir);
         } catch (IOException | NoSuchAlgorithmException | ReflectiveOperationException
                 | RuntimeException | LinkageError failure) {
             state = State.FAILED;
+            HookDiagnostics.resolutionFailed(failure);
             if (moduleArchive != null) {
                 try { moduleArchive.close(); }
                 catch (IOException closeFailure) { failure.addSuppressed(closeFailure); }
@@ -93,7 +100,7 @@ public final class CompatModule implements IXposedHookLoadPackage, IXposedHookZy
             }
         }
         state = State.INSTALLED;
-        Log.i(TAG, "Compat 0.1.110 installed groups=" + installedGroups
+        Log.i(TAG, "Compat " + BuildInfo.VERSION + " installed groups=" + installedGroups
                 + " stock_sha256=" + STOCK_SHA256);
     }
 

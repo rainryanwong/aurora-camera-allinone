@@ -1,10 +1,11 @@
 package com.aurora.camera.compat.workspace;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.util.Log;
 import com.aurora.camera.compat.HookPlan;
 import com.aurora.camera.compat.Host;
 import com.aurora.camera.compat.StrictHook;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.List;
@@ -34,7 +35,7 @@ public final class Workspace248Hooks implements HookPlan {
     public static HookPlan resolve(Host host) throws ReflectiveOperationException {return new Workspace248Hooks(host);}
     @Override public String id(){return "248.capture-workspace-null-default";}
     @Override public void install(){
-        XposedBridge.hookMethod(choose,new StrictHook(){
+        HookDiagnostics.hookMethod(choose,new StrictHook(){
             @Override protected void before(MethodHookParam p) throws Throwable {
                 if(!capture.isInstance(p.thisObject)||!row.isInstance(p.args[0])||defaultRow.get(p.thisObject)!=null)return;
                 Object current=ownerWorkspace.get(p.thisObject);if(!workspace.isInstance(current))return;

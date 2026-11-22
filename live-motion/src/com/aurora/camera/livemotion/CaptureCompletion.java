@@ -1,10 +1,12 @@
 package com.aurora.camera.livemotion;
 
+import com.aurora.camera.diagnostics.ObservedHook;
+
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CaptureResult;
 import android.os.Handler;
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -49,8 +51,8 @@ final class CaptureCompletion {
     }
 
     void install() {
-        XposedBridge.hookMethod(snapshot, new XC_MethodHook() {
-            @Override protected void beforeHookedMethod(MethodHookParam p) throws Throwable {
+        HookDiagnostics.hookMethod(snapshot, new ObservedHook() {
+            @Override protected void runBefore(MethodHookParam p) throws Throwable {
                 Object cb = p.args[1];
                 if (!callbackOwner.getDeclaringClass().isInstance(cb)) return;
                 Object module = callbackOwner.get(cb);
@@ -67,26 +69,26 @@ final class CaptureCompletion {
                         + " type=" + selected);
             }
         });
-        XposedBridge.hookMethod(deliverJpeg, new XC_MethodHook() {
-            @Override protected void beforeHookedMethod(MethodHookParam p) throws Throwable {
+        HookDiagnostics.hookMethod(deliverJpeg, new ObservedHook() {
+            @Override protected void runBefore(MethodHookParam p) throws Throwable {
                 Shot shot = matching(p.args[0]);
                 if (shot != null && (Boolean) jpegReady.invoke(shot.task)) {
                     p.setObjectExtra("Aurora.finalJpeg", shot);
                 }
             }
-            @Override protected void afterHookedMethod(MethodHookParam p) {
+            @Override protected void runAfter(MethodHookParam p) {
                 Shot shot = (Shot) p.getObjectExtra("Aurora.finalJpeg");
                 if (shot != null && !p.hasThrowable()) signal(shot, true);
             }
         });
-        XposedBridge.hookMethod(videoSaved, new XC_MethodHook() {
-            @Override protected void afterHookedMethod(MethodHookParam p) {
+        HookDiagnostics.hookMethod(videoSaved, new ObservedHook() {
+            @Override protected void runAfter(MethodHookParam p) {
                 Shot shot = matching(p.args[0]);
                 if (shot != null && !p.hasThrowable()) signal(shot, false);
             }
         });
-        XC_MethodHook cancel = new XC_MethodHook() {
-            @Override protected void beforeHookedMethod(MethodHookParam p) {
+        ObservedHook cancel = new ObservedHook() {
+            @Override protected void runBefore(MethodHookParam p) {
                 Shot shot = matching(p.args[0]);
                 if (shot != null) {
                     current = null;
@@ -94,8 +96,8 @@ final class CaptureCompletion {
                 }
             }
         };
-        XposedBridge.hookMethod(cancelled, cancel);
-        XposedBridge.hookMethod(failed, cancel);
+        HookDiagnostics.hookMethod(cancelled, cancel);
+        HookDiagnostics.hookMethod(failed, cancel);
     }
 
     private Shot matching(Object task) {

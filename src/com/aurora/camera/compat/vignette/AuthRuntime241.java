@@ -1,11 +1,12 @@
 package com.aurora.camera.compat.vignette;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.util.Log;
 import com.aurora.camera.compat.Host;
 import com.aurora.camera.compat.StrictHook;
 import com.aurora.camera.compat.classic.ClassicCatalog239;
 import com.aurora.camera.compat.classic.ClassicPreview241;
-import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -52,7 +53,7 @@ public final class AuthRuntime241 {
         XposedHelpers.setAdditionalInstanceField(renderer,key,state);Log.e(TAG,value,failure);
     }
     public void install(){
-        XposedBridge.hookMethod(draw,new StrictHook(){
+        HookDiagnostics.hookMethod(draw,new StrictHook(){
             @Override protected void before(MethodHookParam p)throws Throwable{
                 p.setObjectExtra("auth241.draw.previous",drawing.get());drawing.set(p);
                 Formula current=formula;p.setObjectExtra("auth241.formula",current);
@@ -74,7 +75,7 @@ public final class AuthRuntime241 {
             }
         });
         pipeline(configure,"config");pipeline(update,"update");
-        XposedBridge.hookMethod(process,new StrictHook(){
+        HookDiagnostics.hookMethod(process,new StrictHook(){
             @Override protected void after(MethodHookParam p){
                 if(!p.hasThrowable())return;
                 StrictHook.MethodHookParam current=drawing.get();if(current!=null)failure(current.thisObject,"aurora.auth248.process.failure","preview_consumer_failed "+identity((Formula)current.getObjectExtra("auth241.formula")),p.getThrowable());
@@ -82,7 +83,7 @@ public final class AuthRuntime241 {
         });
     }
     private void pipeline(Method method,String event){
-        XposedBridge.hookMethod(method,new StrictHook(){
+        HookDiagnostics.hookMethod(method,new StrictHook(){
             @Override protected void after(MethodHookParam p){
                 if(!p.hasThrowable())return;
                 StrictHook.MethodHookParam current=drawing.get();if(current!=null)failure(current.thisObject,"aurora.auth248.pipeline.failure."+event,"sdk_"+event+"_failed "+identity((Formula)current.getObjectExtra("auth241.formula")),p.getThrowable());

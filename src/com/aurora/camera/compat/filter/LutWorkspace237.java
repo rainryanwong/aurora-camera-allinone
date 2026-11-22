@@ -1,11 +1,12 @@
 package com.aurora.camera.compat.filter;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.util.Log;
 import com.aurora.camera.compat.Host;
 import com.aurora.camera.compat.StrictHook;
-import de.robv.android.xposed.XposedBridge;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Field;
@@ -237,14 +238,14 @@ public final class LutWorkspace237 {
         // Both local initialization and the cloud d() branch replace mItems.
         // Q() consumes that replacement immediately, without calling f().
         for(Method method:new Method[]{initialize,cloudInitialize})CamStyleAccess260.guard(method,filterType);
-        for(Method method:new Method[]{initialize,cloudInitialize})XposedBridge.hookMethod(method,new StrictHook(75){
+        for(Method method:new Method[]{initialize,cloudInitialize})HookDiagnostics.hookMethod(method,new StrictHook(75){
             @Override protected void after(MethodHookParam p)throws Throwable{
                 if(!p.hasThrowable()&&filterType.isInstance(p.thisObject))projectComponent(p.thisObject,(Integer)p.args[0]);
             }
         });
         // Between R2's default-priority normalization and workspace visibility's
         // priority-100 after callback, which requests a main-thread refresh.
-        for(Method method:new Method[]{bind,reload})XposedBridge.hookMethod(method,new StrictHook(75){
+        for(Method method:new Method[]{bind,reload})HookDiagnostics.hookMethod(method,new StrictHook(75){
             private boolean observed;
             @Override protected void before(MethodHookParam p)throws Throwable{
                 int mode=(Integer)p.args[0];if(Boolean.TRUE.equals(synchronizing.get()))return;
@@ -270,13 +271,13 @@ public final class LutWorkspace237 {
             }
         });
         // Replace only the body, after all existing projection/maintenance before hooks.
-        XposedBridge.hookMethod(bind,new StrictHook(-1000){
+        HookDiagnostics.hookMethod(bind,new StrictHook(-1000){
             @Override protected void before(MethodHookParam p)throws Throwable{
                 if((Integer)p.args[0]!=163||!w.camStyle.isInstance(p.thisObject))return;
                 bindIndexed(p.thisObject,(Integer)p.args[0]);p.setResult(null);
             }
         });
-        XposedBridge.hookMethod(reload,new StrictHook(-1000){
+        HookDiagnostics.hookMethod(reload,new StrictHook(-1000){
             @Override protected void before(MethodHookParam p)throws Throwable{
                 if((Integer)p.args[0]!=163||!w.camStyle.isInstance(p.thisObject))return;
                 p.setResult(reloadIndexed(p.thisObject,(Integer)p.args[0],(Context)p.args[1],p.args[2]));

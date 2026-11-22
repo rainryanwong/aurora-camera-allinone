@@ -1,11 +1,12 @@
 package com.aurora.camera.compat.watermark;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.Context;
 import android.util.Log;
 import com.aurora.camera.compat.Host;
 import com.aurora.camera.compat.StrictHook;
 import com.aurora.camera.compat.editor.Editor245Assets;
-import de.robv.android.xposed.XposedBridge;
 import java.io.*;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -117,18 +118,18 @@ public final class CameraLeica248 {
         return current.ids.contains(id)&&allowed.contains(id)&&path.equals(current.root.resolve("leica").resolve(id))?id:null;
     }
     public void install() {
-        XposedBridge.hookMethod(filter,new StrictHook(){
+        HookDiagnostics.hookMethod(filter,new StrictHook(){
             @Override protected void before(MethodHookParam p){if(photoManager.isInstance(p.thisObject)){p.setObjectExtra("248.leica.previous",filtering.get());filtering.set(ready);}}
             @Override protected void after(MethodHookParam p){if(photoManager.isInstance(p.thisObject)){Ready previous=(Ready)p.getObjectExtra("248.leica.previous");if(previous==null)filtering.remove();else filtering.set(previous);}}
         });
-        XposedBridge.hookMethod(theme,new StrictHook(){
+        HookDiagnostics.hookMethod(theme,new StrictHook(){
             @Override protected void after(MethodHookParam p) throws Throwable {
                 if(p.hasThrowable()||!Boolean.TRUE.equals(p.getResult()))return;
                 String id=eligible(p.args[0],THEME);if(id==null)return;p.setResult(Boolean.FALSE);
                 if(logged.add("theme:"+id))Log.i(TAG,"photo-only native Leica theme eligibility released; id="+id);
             }
         });
-        XposedBridge.hookMethod(device,new StrictHook(){
+        HookDiagnostics.hookMethod(device,new StrictHook(){
             @Override protected void after(MethodHookParam p) throws Throwable {
                 if(p.hasThrowable()||!Boolean.TRUE.equals(p.getResult()))return;
                 String id=eligible(p.args[0],ids("2"));if(id==null)return;p.setResult(Boolean.FALSE);

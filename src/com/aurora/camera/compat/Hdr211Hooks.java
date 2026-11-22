@@ -1,6 +1,7 @@
 package com.aurora.camera.compat;
 
-import de.robv.android.xposed.XposedBridge;
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.util.Log;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -42,7 +43,7 @@ public final class Hdr211Hooks {
         return new HookPlan(){
             public String id(){return "211.stock-hdr-on-branch";}
             public void install(){
-                XposedBridge.hookMethod(initialize,new StrictHook(){
+                HookDiagnostics.hookMethod(initialize,new StrictHook(){
                     @Override protected void before(MethodHookParam p)throws Throwable{p.setObjectExtra("213.hdr.previous",rawItems.get(p.thisObject));}
                     @Override protected void after(MethodHookParam p)throws Throwable{
                         if(p.hasThrowable()||!still(inputMode.getInt(p.args[0])))return;
@@ -70,7 +71,7 @@ public final class Hdr211Hooks {
                         ArrayList<String> result=new ArrayList<>();for(Object row:rows)result.add((String)rowValue.get(row));return result.toString();
                     }
                 });
-                XposedBridge.hookMethod(cycle,new StrictHook(){
+                HookDiagnostics.hookMethod(cycle,new StrictHook(){
                     @Override protected void before(MethodHookParam p)throws Throwable{
                         // Stock m() is a binary shortcut: off -> row 1 -> off,
                         // even when t() supplies three rows. Use the native list
@@ -88,7 +89,7 @@ public final class Hdr211Hooks {
                         if(normal)p.setResult(rowValue.get(rows.get((current+1)%rows.size())));
                     }
                 });
-                XposedBridge.hookMethod(description,new StrictHook(){
+                HookDiagnostics.hookMethod(description,new StrictHook(){
                     @Override protected void before(MethodHookParam p)throws Throwable{
                         // The native s() labels normal as AUTO when profile.U1 is true.
                         // Its value/consumer are still HDR=1; use the existing ON a11y label.

@@ -1,20 +1,21 @@
 package com.aurora.camera.compat;
 
-import de.robv.android.xposed.XC_MethodHook;
+import com.aurora.camera.diagnostics.ObservedHook;
+
 import java.lang.reflect.InvocationTargetException;
 
 /** Transfer callback failures through Xposed's result instead of its swallow path. */
-public abstract class StrictHook extends XC_MethodHook {
+public abstract class StrictHook extends ObservedHook {
     protected StrictHook(){super();}
     protected StrictHook(int priority){super(priority);}
     protected void before(MethodHookParam param) throws Throwable {}
     protected void after(MethodHookParam param) throws Throwable {}
 
-    @Override protected final void beforeHookedMethod(MethodHookParam param) {
+    @Override protected final void runBefore(MethodHookParam param) {
         try { before(param); } catch (Throwable failure) { failed(param,"before",failure); }
     }
 
-    @Override protected final void afterHookedMethod(MethodHookParam param) {
+    @Override protected final void runAfter(MethodHookParam param) {
         try { after(param); } catch (Throwable failure) { failed(param,"after",failure); }
     }
 

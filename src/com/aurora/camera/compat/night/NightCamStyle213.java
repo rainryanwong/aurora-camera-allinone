@@ -1,9 +1,10 @@
 package com.aurora.camera.compat.night;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.util.Log;
 import com.aurora.camera.compat.Host;
 import com.aurora.camera.compat.StrictHook;
-import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -49,8 +50,8 @@ public final class NightCamStyle213 {
         StrictHook qualify=new StrictHook(){
             @Override protected void before(MethodHookParam p){if((Integer)p.args[0]==173)p.args[0]=163;}
         };
-        XposedBridge.hookMethod(support,qualify);XposedBridge.hookMethod(eligible,qualify);XposedBridge.hookMethod(softLight,qualify);
-        XposedBridge.hookMethod(initialize,new StrictHook(){
+        HookDiagnostics.hookMethod(support,qualify);HookDiagnostics.hookMethod(eligible,qualify);HookDiagnostics.hookMethod(softLight,qualify);
+        HookDiagnostics.hookMethod(initialize,new StrictHook(){
             @Override protected void after(MethodHookParam p)throws Throwable {
                 if(p.hasThrowable()||(Boolean)excludedInitialization.invoke(null)||mode.getInt(p.thisObject)!=173||inputMode.getInt(p.args[0])!=173)return;
                 // Same physical rear/capability requirement as photo's R(), whose
@@ -60,14 +61,14 @@ public final class NightCamStyle213 {
         });
         for(int i=0;i<keys.length;i++){
             final Method prefix=general[i];
-            XposedBridge.hookMethod(keys[i],new StrictHook(){
+            HookDiagnostics.hookMethod(keys[i],new StrictHook(){
                 @Override protected void before(MethodHookParam p)throws Throwable{
                     if((Integer)p.args[0]!=173)return;
                     p.setResult(nightKey(prefix,p.thisObject));
                 }
             });
         }
-        XposedBridge.hookMethod(clearAllPalette,new StrictHook(){
+        HookDiagnostics.hookMethod(clearAllPalette,new StrictHook(){
             @Override protected void after(MethodHookParam p)throws Throwable{
                 if(p.hasThrowable())return;
                 // Native q is the all-mode cleanup and keeps its original mode set.
@@ -77,7 +78,7 @@ public final class NightCamStyle213 {
                 }
             }
         });
-        XposedBridge.hookMethod(loadWorkspace,new StrictHook(){
+        HookDiagnostics.hookMethod(loadWorkspace,new StrictHook(){
             @Override protected void after(MethodHookParam p)throws Throwable {
                 if(p.hasThrowable()||workspaceMode.getInt(p.thisObject)!=173||workspaceLogs.getAndIncrement()>=8)return;
                 List<?> rows=(List<?>)getList.invoke(p.thisObject);

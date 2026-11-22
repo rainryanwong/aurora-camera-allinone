@@ -1,8 +1,9 @@
 package com.aurora.camera.compat.editor;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import com.aurora.camera.compat.Host;
 import com.aurora.camera.compat.StrictHook;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -23,7 +24,7 @@ public final class EditorLeicaFilters292 {
     }
 
     public void install() {
-        XposedBridge.hookMethod(cloudItem,new StrictHook() {
+        HookDiagnostics.hookMethod(cloudItem,new StrictHook() {
             @Override protected void before(MethodHookParam p) {
                 if((Integer)p.args[0]!=4)return;
                 @SuppressWarnings("unchecked") List<String> devices=(List<String>)p.args[11];

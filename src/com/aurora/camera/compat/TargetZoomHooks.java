@@ -1,7 +1,8 @@
 package com.aurora.camera.compat;
 
-import de.robv.android.xposed.XC_MethodReplacement;
-import de.robv.android.xposed.XposedBridge;
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
+import com.aurora.camera.diagnostics.ObservedReplacement;
 import java.lang.reflect.Method;
 
 /** F30: retain the accepted stale-J2 compatibility behavior and its known tradeoff. */
@@ -14,7 +15,7 @@ public final class TargetZoomHooks {
         return new HookPlan() {
             public String id() { return "F30.target-zoom-stale-gate"; }
             public void install() {
-                XposedBridge.hookMethod(gate, XC_MethodReplacement.returnConstant(false));
+                HookDiagnostics.hookMethod(gate, ObservedReplacement.returnConstant(false));
             }
         };
     }

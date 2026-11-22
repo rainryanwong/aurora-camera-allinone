@@ -1,8 +1,10 @@
 package com.aurora.camera.livemotion;
 
+import com.aurora.camera.diagnostics.ObservedHook;
+
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.hardware.camera2.CaptureRequest;
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
@@ -54,8 +56,8 @@ final class TargetZoom {
     }
 
     void install() {
-        XposedBridge.hookMethod(apply, new XC_MethodHook() {
-            @Override protected void afterHookedMethod(MethodHookParam p) throws Throwable {
+        HookDiagnostics.hookMethod(apply, new ObservedHook() {
+            @Override protected void runAfter(MethodHookParam p) throws Throwable {
                 Scope scope = selected();
                 if (scope == null || p.hasThrowable() || p.args[0] == null || p.args[1] == null) return;
                 Object current = currentConfig(scope);
@@ -72,8 +74,8 @@ final class TargetZoom {
         });
         for (int i = 0; i < stillApply.length; i++) {
             final Field shot = stillShot[i], builder = stillBuilder[i];
-            XposedBridge.hookMethod(stillApply[i], new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam p) throws Throwable {
+            HookDiagnostics.hookMethod(stillApply[i], new ObservedHook() {
+                @Override protected void runAfter(MethodHookParam p) throws Throwable {
                     Scope scope = selected();
                     if (scope == null || p.hasThrowable()
                             || p.args[0] != zoomManager.invoke(scope.module)) return;

@@ -1,5 +1,7 @@
 package com.aurora.camera.compat.legend;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.CaptureResult;
@@ -8,7 +10,6 @@ import android.opengl.GLES20;
 import android.util.Log;
 import com.aurora.camera.compat.Host;
 import com.aurora.camera.compat.StrictHook;
-import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import java.io.InputStream;
 import java.io.ByteArrayOutputStream;
@@ -68,17 +69,17 @@ public final class M3Preview260 {
         try(ZipFile apk=new ZipFile(host.moduleApkPath);InputStream in=apk.getInputStream(apk.getEntry("assets/legend260/leica_filter_param_m3.bin"));ByteArrayOutputStream out=new ByteArrayOutputStream()){
             byte[] buffer=new byte[8192];for(int n;(n=in.read(buffer))!=-1;)out.write(buffer,0,n);parameters=new M3Parameters260(out.toByteArray());
         }
-        XposedBridge.hookMethod(shader,new StrictHook(){@Override protected void after(MethodHookParam p){if(!p.hasThrowable()&&(Integer)p.args[0]==2)p.setResult(inject((String)p.getResult()));}});
-        XposedBridge.hookMethod(initialize,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(shader,new StrictHook(){@Override protected void after(MethodHookParam p){if(!p.hasThrowable()&&(Integer)p.args[0]==2)p.setResult(inject((String)p.getResult()));}});
+        HookDiagnostics.hookMethod(initialize,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
             if(p.hasThrowable()||textureTarget.getInt(p.thisObject)!=36197)return;
             Uniform state=new Uniform(program.getInt(p.thisObject));XposedHelpers.setAdditionalInstanceField(p.thisObject,UNIFORM,state);state.apply(false);
         }});
-        for(Method method:draws)XposedBridge.hookMethod(method,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
+        for(Method method:draws)HookDiagnostics.hookMethod(method,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
             if(textureTarget.getInt(p.thisObject)!=36197)return;
             Object owner=main();boolean enabled=owner!=null&&oes.get(owner)==p.thisObject&&m3();
             ((Uniform)XposedHelpers.getAdditionalInstanceField(p.thisObject,UNIFORM)).apply(enabled);
         }});
-        XposedBridge.hookMethod(metadata,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(metadata,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
             if(p.hasThrowable()||!m3())return;TotalCaptureResult result=(TotalCaptureResult)p.args[2];int[] module=result.getRequest().get(MODULE);
             if(module==null||module.length!=1||module[0]!=256)return;
             byte[] aec=result.get(AEC);Float zoom=result.get(CaptureResult.CONTROL_ZOOM_RATIO);if(aec==null||aec.length<100||zoom==null)return;
@@ -86,14 +87,14 @@ public final class M3Preview260 {
             if(!Float.isFinite(lux)||lux<0||lux>65535||!Float.isFinite(zoom)||zoom<=0)throw new IllegalArgumentException("Invalid M3 preview exposure metadata");
             exposure=new Exposure((int)lux,zoom);
         }});
-        XposedBridge.hookMethod(hasRender,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{if(!p.hasThrowable()&&p.thisObject==main()&&m3())p.setResult(true);}});
-        XposedBridge.hookMethod(render,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(hasRender,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{if(!p.hasThrowable()&&p.thisObject==main()&&m3())p.setResult(true);}});
+        HookDiagnostics.hookMethod(render,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
             Exposure current=exposure;if(p.hasThrowable()||current==null||!ready.getBoolean(p.thisObject)||p.thisObject!=main()||!m3())return;
             Preview preview=(Preview)XposedHelpers.getAdditionalInstanceField(p.thisObject,PREVIEW);
             if(preview==null){preview=new Preview();XposedHelpers.setAdditionalInstanceField(p.thisObject,PREVIEW,preview);}
             preview.render(p.thisObject,current);
         }});
-        XposedBridge.hookMethod(release,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(release,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
             Object owner=rendererEngine.get(p.thisObject);Preview preview=(Preview)XposedHelpers.removeAdditionalInstanceField(owner,PREVIEW);
             if(preview!=null)sdkRelease.invoke(preview.sdk);
         }});

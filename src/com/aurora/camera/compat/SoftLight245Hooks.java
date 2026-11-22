@@ -1,5 +1,7 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Bundle;
@@ -8,7 +10,6 @@ import android.view.View;
 import com.aurora.camera.compat.softlight.SoftLightPanel245;
 import com.aurora.camera.compat.softlight.SoftLightRuntime245;
 import com.aurora.camera.compat.ui.NativePreferences240;
-import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
@@ -58,23 +59,23 @@ public final class SoftLight245Hooks {
                 }));call(group,"j0",row);
             }
             public void install(){
-                XposedBridge.hookMethod(settings,new StrictHook(){@Override protected void after(MethodHookParam p){if(!p.hasThrowable())settings(p.thisObject);}});
-                XposedBridge.hookMethod(runtime.soft,new StrictHook(){@Override protected void after(MethodHookParam p){if(p.hasThrowable())return;enabled();if(!runtime.active()||runtime.reading())return;Object next=runtime.effective(p.thisObject,(Integer)p.args[0],p.getResult());if(next!=p.getResult())p.setResult(next);panel.refresh();}});
-                XposedBridge.hookMethod(runtime.filter,new StrictHook(){@Override protected void after(MethodHookParam p){if(p.hasThrowable())return;enabled();if(runtime.active()){runtime.sync(p.thisObject);runtime.standalonePreview(p.thisObject);panel.refresh();}runtime.pictureRefresh(p.thisObject);}});
-                XposedBridge.hookMethod(runtime.picture,new StrictHook(){@Override protected void after(MethodHookParam p){if(!p.hasThrowable()){enabled();runtime.picture(p.thisObject,p.getResult());}}});
-                XposedBridge.hookMethod(runtime.attach,new StrictHook(){@Override protected void after(MethodHookParam p){if(p.hasThrowable()||p.args[0]==null)return;enabled();if(runtime.active())runtime.refresh(p.thisObject);}});
-                XposedBridge.hookMethod(runtime.graph,new StrictHook(){@Override protected void before(MethodHookParam p){runtime.graph(p.thisObject,p.args[0]);}});
-                XposedBridge.hookMethod(runtime.tagType,new StrictHook(){@Override protected void after(MethodHookParam p){if(p.hasThrowable())return;enabled();runtime.prepareTag(p.thisObject);}});
-                XposedBridge.hookMethod(runtime.tagParams,new StrictHook(25){
+                HookDiagnostics.hookMethod(settings,new StrictHook(){@Override protected void after(MethodHookParam p){if(!p.hasThrowable())settings(p.thisObject);}});
+                HookDiagnostics.hookMethod(runtime.soft,new StrictHook(){@Override protected void after(MethodHookParam p){if(p.hasThrowable())return;enabled();if(!runtime.active()||runtime.reading())return;Object next=runtime.effective(p.thisObject,(Integer)p.args[0],p.getResult());if(next!=p.getResult())p.setResult(next);panel.refresh();}});
+                HookDiagnostics.hookMethod(runtime.filter,new StrictHook(){@Override protected void after(MethodHookParam p){if(p.hasThrowable())return;enabled();if(runtime.active()){runtime.sync(p.thisObject);runtime.standalonePreview(p.thisObject);panel.refresh();}runtime.pictureRefresh(p.thisObject);}});
+                HookDiagnostics.hookMethod(runtime.picture,new StrictHook(){@Override protected void after(MethodHookParam p){if(!p.hasThrowable()){enabled();runtime.picture(p.thisObject,p.getResult());}}});
+                HookDiagnostics.hookMethod(runtime.attach,new StrictHook(){@Override protected void after(MethodHookParam p){if(p.hasThrowable()||p.args[0]==null)return;enabled();if(runtime.active())runtime.refresh(p.thisObject);}});
+                HookDiagnostics.hookMethod(runtime.graph,new StrictHook(){@Override protected void before(MethodHookParam p){runtime.graph(p.thisObject,p.args[0]);}});
+                HookDiagnostics.hookMethod(runtime.tagType,new StrictHook(){@Override protected void after(MethodHookParam p){if(p.hasThrowable())return;enabled();runtime.prepareTag(p.thisObject);}});
+                HookDiagnostics.hookMethod(runtime.tagParams,new StrictHook(25){
                     @Override protected void before(MethodHookParam p){runtime.reassertTag(p.thisObject);p.setObjectExtra(SCOPE,capture.get());p.setObjectExtra(SCOPE+".picture",runtime.enterTag(p.thisObject));p.setObjectExtra(SCOPE+".entered",true);capture.set(runtime.standaloneTag(p.thisObject));}
                     @Override protected void after(MethodHookParam p){if(!Boolean.TRUE.equals(p.getObjectExtra(SCOPE+".entered")))return;runtime.leaveTag((Integer)p.getObjectExtra(SCOPE+".picture"));Boolean previous=(Boolean)p.getObjectExtra(SCOPE);if(previous==null)capture.remove();else capture.set(previous);}
                 });
-                XposedBridge.hookMethod(runtime.lookup,new StrictHook(){@Override protected void before(MethodHookParam p){if(Boolean.TRUE.equals(capture.get())&&runtime.noFilter((Integer)p.args[0])){p.args[0]=runtime.carrier();p.args[1]=0;}}});
-                XposedBridge.hookMethod(runtime.save,new StrictHook(){@Override protected void before(MethodHookParam p){if(Boolean.TRUE.equals(capture.get())&&runtime.noFilter((Integer)p.args[0]))p.args[0]=runtime.carrier();}});
+                HookDiagnostics.hookMethod(runtime.lookup,new StrictHook(){@Override protected void before(MethodHookParam p){if(Boolean.TRUE.equals(capture.get())&&runtime.noFilter((Integer)p.args[0])){p.args[0]=runtime.carrier();p.args[1]=0;}}});
+                HookDiagnostics.hookMethod(runtime.save,new StrictHook(){@Override protected void before(MethodHookParam p){if(Boolean.TRUE.equals(capture.get())&&runtime.noFilter((Integer)p.args[0]))p.args[0]=runtime.carrier();}});
                 StrictHook update=new StrictHook(){@Override protected void after(MethodHookParam p){if(p.hasThrowable())return;enabled();panel.update(p.thisObject);}};
-                for(Method method:updates)XposedBridge.hookMethod(method,update);
-                XposedBridge.hookMethod(destroy,new StrictHook(){@Override protected void before(MethodHookParam p){panel.destroy(p.thisObject);}});
-                XposedBridge.hookMethod(stop,new StrictHook(){@Override protected void before(MethodHookParam p){panel.stop(p.thisObject);}});
+                for(Method method:updates)HookDiagnostics.hookMethod(method,update);
+                HookDiagnostics.hookMethod(destroy,new StrictHook(){@Override protected void before(MethodHookParam p){panel.destroy(p.thisObject);}});
+                HookDiagnostics.hookMethod(stop,new StrictHook(){@Override protected void before(MethodHookParam p){panel.stop(p.thisObject);}});
             }
         };
     }

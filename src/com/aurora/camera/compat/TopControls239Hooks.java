@@ -1,8 +1,9 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.view.View;
 import android.util.Log;
-import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -104,7 +105,7 @@ public final class TopControls239Hooks {
                 XposedHelpers.callMethod(parent,"g");XposedHelpers.callMethod(parent,"r",key,"done");XposedHelpers.callMethod(parent,"c");
             }
             public void install(){
-                XposedBridge.hookMethod(apertureRefresh,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
+                HookDiagnostics.hookMethod(apertureRefresh,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
                     if(p.hasThrowable())return;
                     Object global=XposedHelpers.callStaticMethod(type("g2.a"),"g");
                     int mode=(Integer)XposedHelpers.callMethod(global,"D",XposedHelpers.getObjectField(global,"u"));
@@ -114,10 +115,10 @@ public final class TopControls239Hooks {
                         panel.ifPresent(refresh);
                     }
                 }});
-                XposedBridge.hookMethod(factory,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
+                HookDiagnostics.hookMethod(factory,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
                     if((Integer)p.args[0]==CCLOCK)p.setResult(cclock(true));
                 }});
-                XposedBridge.hookMethod(defaults,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
+                HookDiagnostics.hookMethod(defaults,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
                     if(p.hasThrowable())return;int mode=(Integer)p.args[0];if((mode!=162&&mode!=180)||id(mode)!=CCLOCK)return;
                     @SuppressWarnings("unchecked") List<Integer> previous=(List<Integer>)p.getResult();
                     ArrayList<Integer> result=dropdownWithoutBlanks(previous);if(!result.contains(CCLOCK))result.add(CCLOCK);p.setResult(result);
@@ -134,14 +135,14 @@ public final class TopControls239Hooks {
                     for(Object row:result)if((Integer)XposedHelpers.getObjectField(row,"c")==token){if(!result.equals(previous))p.setResult(result);return;}
                     result.add(token==CCLOCK?cclock(false):factory.invoke(null,APERTURE));p.setResult(result);
                 }};
-                for(Method method:providers)XposedBridge.hookMethod(method,provider);
-                XposedBridge.hookMethod(available,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
+                for(Method method:providers)HookDiagnostics.hookMethod(method,provider);
+                HookDiagnostics.hookMethod(available,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
                     int mode=(Integer)p.args[0],token=id(mode);if(token==0)return;
                     @SuppressWarnings("unchecked") ArrayList<Integer> values=(ArrayList<Integer>)p.args[1];
                     if(!values.contains(token))values.add(token);migrate(p.thisObject,mode,token);
                     if(token==CCLOCK)Log.i("AuroraTop240","available mode="+mode+" ownerMode="+XposedHelpers.getObjectField(p.thisObject,"mCurrentMode")+" values="+values+" saved="+XposedHelpers.callMethod(p.thisObject,"U",mode));
                 }});
-                XposedBridge.hookMethod(rows,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
+                HookDiagnostics.hookMethod(rows,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
                     int mode=(Integer)XposedHelpers.getObjectField(p.thisObject,"mCurrentMode");if(mode!=162&&mode!=180)return;
                     @SuppressWarnings("unchecked") List<Integer> chosen=(List<Integer>)p.args[0];
                     ArrayList<Integer> clean=dropdownWithoutBlanks(chosen);

@@ -1,5 +1,9 @@
 package com.aurora.camera.features.watermark;
 
+import com.aurora.camera.diagnostics.ObservedHook;
+
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.Context;
 import android.util.Log;
 import java.lang.reflect.Method;
@@ -41,8 +45,8 @@ public final class WatermarkModule {
             if (publish.getReturnType()!=boolean.class || entry.getReturnType()!=void.class ||
                 !Modifier.isStatic(publish.getModifiers()) || !Modifier.isStatic(entry.getModifiers())) throw new NoSuchMethodException("publisher signature");
             publish.setAccessible(true); entry.setAccessible(true);
-            XposedBridge.hookMethod(entry,new XC_MethodHook() {
-                protected void beforeHookedMethod(MethodHookParam p) {
+            HookDiagnostics.hookMethod(entry,new ObservedHook() {
+                protected void runBefore(MethodHookParam p) {
                     if (Boolean.TRUE.equals(publishing.get())) return;
                     Path candidate=(Path)p.args[0];if(candidate==null||candidate.getFileName()==null||!candidate.getFileName().toString().matches("mivi_\\d+\\.json"))return;
                     try {
@@ -56,7 +60,7 @@ public final class WatermarkModule {
                     LOCK.lock();p.setObjectExtra("217.watermark.lock",Boolean.TRUE);
                     transform(host,publish,(Path)p.args[0],(Path)p.args[1]);
                 }
-                protected void afterHookedMethod(MethodHookParam p) {
+                protected void runAfter(MethodHookParam p) {
                     if(!Boolean.TRUE.equals(p.getObjectExtra("217.watermark.lock")))return;
                     Transaction t=transaction.get(); transaction.remove();
                     try{
@@ -71,8 +75,8 @@ public final class WatermarkModule {
                     }finally{LOCK.unlock();}
                 }
             });
-            XposedBridge.hookMethod(publish,new XC_MethodHook() {
-                protected void afterHookedMethod(MethodHookParam p) {
+            HookDiagnostics.hookMethod(publish,new ObservedHook() {
+                protected void runAfter(MethodHookParam p) {
                     String name=String.valueOf(p.args[1]);
                     if (!Boolean.TRUE.equals(publishing.get()) && name.matches("mivi_\\d+\\.json"))
                         log("JSON_PUBLISH name="+name+" accepted="+(!p.hasThrowable() && Boolean.TRUE.equals(p.getResult())));

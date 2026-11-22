@@ -1,5 +1,9 @@
 package com.aurora.camera.features.watermark;
 
+import com.aurora.camera.diagnostics.ObservedHook;
+
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.util.Log;
@@ -75,8 +79,8 @@ final class RenderingHooks {
             final Class<?> viewNode=Class.forName("vs.a",false,loader);
             final Method nodeId=viewNode.getDeclaredMethod("i");
             if(nodeId.getReturnType()!=String.class)throw new NoSuchMethodException("Camera node identity contract");
-            XposedBridge.hookMethod(product,new XC_MethodHook() {
-                protected void afterHookedMethod(MethodHookParam p) {
+            HookDiagnostics.hookMethod(product,new ObservedHook() {
+                protected void runAfter(MethodHookParam p) {
                     try {
                         if(p.hasThrowable() || p.getResult()==null)return;
                         String n=selected(loader);
@@ -86,8 +90,8 @@ final class RenderingHooks {
                     } catch(Throwable err) {Log.e(TAG,"TI_ROUTE_FAILED; OEM retained",err);}
                 }
             });
-            XposedBridge.hookMethod(text,new XC_MethodHook() {
-                protected void beforeHookedMethod(MethodHookParam p) {
+            HookDiagnostics.hookMethod(text,new ObservedHook() {
+                protected void runBefore(MethodHookParam p) {
                     try {
                         String n=selected(loader);if(n.isEmpty())return;
                         // MiVi publication needs the complete model text before asset conversion.
@@ -95,8 +99,8 @@ final class RenderingHooks {
                     } catch(Throwable err) {Log.e(TAG,"TEXT_ROUTE_FAILED; OEM retained",err);}
                 }
             });
-            XC_MethodHook gate=new XC_MethodHook() {
-                protected void beforeHookedMethod(MethodHookParam p) {
+            ObservedHook gate=new ObservedHook() {
+                protected void runBefore(MethodHookParam p) {
                     ReentrantLock lock=rendererLock(p.thisObject);lock.lock();p.setObjectExtra("217.renderer.lock",lock);
                     try {
                         String n=selected(loader);if(n.isEmpty())return;
@@ -121,7 +125,7 @@ final class RenderingHooks {
                         activeRender.set(current!=null&&current.owner==p.thisObject&&current.name.equals(n)?current:new Render(n,p.thisObject));
                     } catch(Throwable err) {Log.e(TAG,"BITMAP_GATE_FAILED; OEM retained",err);}
                 }
-                protected void afterHookedMethod(MethodHookParam p) throws Throwable {
+                protected void runAfter(MethodHookParam p) throws Throwable {
                     try {
                         if(!Boolean.TRUE.equals(p.getObjectExtra("aurora.applied")))return;
                         try {rendererModel.set(p.thisObject,p.getObjectExtra("aurora.model"));}
@@ -129,9 +133,9 @@ final class RenderingHooks {
                     } finally {ReentrantLock lock=(ReentrantLock)p.getObjectExtra("217.renderer.lock");if(lock!=null)lock.unlock();}
                 }
             };
-            XposedBridge.hookMethod(e,gate);XposedBridge.hookMethod(f,gate);
-            XposedBridge.hookMethod(asset,new XC_MethodHook() {
-                protected void beforeHookedMethod(MethodHookParam p) {
+            HookDiagnostics.hookMethod(e,gate);HookDiagnostics.hookMethod(f,gate);
+            HookDiagnostics.hookMethod(asset,new ObservedHook() {
+                protected void runBefore(MethodHookParam p) {
                     Render current=activeRender.get();
                     if(current==null||!leica(current.name))return;
                     String path=(String)p.args[1];
@@ -143,7 +147,7 @@ final class RenderingHooks {
                     p.setObjectExtra("217.brand.cached",Boolean.TRUE);
                     current.composed=true;
                 }
-                protected void afterHookedMethod(MethodHookParam p) {
+                protected void runAfter(MethodHookParam p) {
                     if(Boolean.TRUE.equals(p.getObjectExtra("217.brand.cached")))return;
                     Render current=activeRender.get();
                     if(current==null || !leica(current.name) || p.hasThrowable() || !(p.getResult() instanceof Bitmap))return;

@@ -1,12 +1,13 @@
 package com.aurora.camera.compat.filter;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
 import com.aurora.camera.compat.Host;
 import com.aurora.camera.compat.StrictHook;
-import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import java.io.IOException;
 import java.lang.reflect.Field;
@@ -261,12 +262,18 @@ public final class FilterWorkspace215 {
         return cache.visible;
     }
     public void install(){
-        XposedBridge.hookMethod(currentMode,new StrictHook(){@Override protected void before(MethodHookParam p){
-            if(Boolean.TRUE.equals(photoLoading.get()))p.setResult(163);
-        }});
+        HookDiagnostics.hookMethod(currentMode,new StrictHook(100){
+            @Override protected void before(MethodHookParam p){
+                // Restoring the photo workspace takes precedence over the active mode.
+                if(Boolean.TRUE.equals(photoLoading.get()))p.setResult(163);
+            }
+            @Override protected boolean countsAsRun(MethodHookParam p){
+                return Boolean.TRUE.equals(photoLoading.get());
+            }
+        });
         // Hold the catalog transaction across the complete native call and
         // all its projection callbacks. UI publication is queued on main.
-        for(Method method:maintenance)XposedBridge.hookMethod(method,new StrictHook(100){
+        for(Method method:maintenance)HookDiagnostics.hookMethod(method,new StrictHook(100){
             @Override protected void before(MethodHookParam p){if(camStyle.isInstance(p.thisObject))enter();}
             @Override protected void after(MethodHookParam p){if(camStyle.isInstance(p.thisObject)){leave();changed();}}
         });
@@ -276,7 +283,7 @@ public final class FilterWorkspace215 {
         CamStyleAccess260.guard(markSelected,styleRow);
         for(Method method:gridMaintenance)CamStyleAccess260.guard(method,nativeManager);
         Method pause=gridMaintenance.get(2);
-        XposedBridge.hookMethod(pause,new StrictHook(){
+        HookDiagnostics.hookMethod(pause,new StrictHook(){
             @Override protected void before(MethodHookParam p){
                 Object grid=read(gridAdapter,p.thisObject);if(grid==null)return;
                 Object ws=read(fragmentWorkspace,p.thisObject);
@@ -288,9 +295,9 @@ public final class FilterWorkspace215 {
             }
             @Override protected void after(MethodHookParam p){changed();}
         });
-        XposedBridge.hookMethod(setOrder,new StrictHook(){@Override protected void after(MethodHookParam p){if(styleRow.isInstance(p.thisObject))changed();}});
-        XposedBridge.hookMethod(resume,new StrictHook(){@Override protected void after(MethodHookParam p){if(p.hasThrowable())return;for(WeakReference<Object> ref:fragments)if(ref.get()==p.thisObject)return;fragments.add(new WeakReference<>(p.thisObject));}});
-        XposedBridge.hookMethod(getList,new StrictHook(){
+        HookDiagnostics.hookMethod(setOrder,new StrictHook(){@Override protected void after(MethodHookParam p){if(styleRow.isInstance(p.thisObject))changed();}});
+        HookDiagnostics.hookMethod(resume,new StrictHook(){@Override protected void after(MethodHookParam p){if(p.hasThrowable())return;for(WeakReference<Object> ref:fragments)if(ref.get()==p.thisObject)return;fragments.add(new WeakReference<>(p.thisObject));}});
+        HookDiagnostics.hookMethod(getList,new StrictHook(){
             @Override protected void after(MethodHookParam p){
                 if(p.hasThrowable()||full()||!camStyle.isInstance(p.thisObject))return;
                 p.setResult(project(p.thisObject,false));

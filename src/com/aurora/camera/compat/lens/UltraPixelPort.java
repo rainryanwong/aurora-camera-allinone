@@ -1,11 +1,12 @@
 package com.aurora.camera.compat.lens;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.Context;
 import android.content.res.Resources;
 import android.hardware.camera2.CameraCharacteristics;
 import android.util.Size;
 import com.aurora.camera.compat.Host;
-import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -82,7 +83,7 @@ public final class UltraPixelPort {
     }
 
     public void install() {
-        XposedBridge.hookMethod(initialize,new LensHook() {
+        HookDiagnostics.hookMethod(initialize,new LensHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 int mode=(int)p.args[0];
                 if (mode==168 || mode==175) { initialize(p.thisObject,mode,(int)p.args[1],p.args[2]); p.setResult(null); }

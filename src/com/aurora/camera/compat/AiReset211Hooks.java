@@ -1,6 +1,7 @@
 package com.aurora.camera.compat;
 
-import de.robv.android.xposed.XposedBridge;
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -21,7 +22,7 @@ public final class AiReset211Hooks {
         return new HookPlan(){
             public String id(){return "211.ai-reset-keep-zoom-opt-in";}
             public void install(){
-                XposedBridge.hookMethod(reset,new StrictHook(){
+                HookDiagnostics.hookMethod(reset,new StrictHook(){
                     @Override protected void before(MethodHookParam p)throws Throwable{
                         if(mode.getInt(p.thisObject)!=168||!finished.getBoolean(p.thisObject)||!(Boolean)preference.invoke(global.invoke(null),"pref_aurora_ai_reset_keep_zoom",false))return;
                         // Exact native lg() non-zoom tail. Ys keeps its own async pose-reset

@@ -1,8 +1,9 @@
 package com.aurora.camera.compat.aperture;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import com.aurora.camera.compat.Host;
 import com.aurora.camera.compat.StrictHook;
-import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -69,7 +70,7 @@ final class AiProfessionalAperture {
     }
 
     void install() {
-        XposedBridge.hookMethod(initialize,new StrictHook() {
+        HookDiagnostics.hookMethod(initialize,new StrictHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 if (professional.isInstance(p.thisObject)) return;
                 if (mode.getInt(p.thisObject)==168 || initMode.getInt(p.args[0])==168) {
@@ -81,7 +82,7 @@ final class AiProfessionalAperture {
                 }
             }
         });
-        XposedBridge.hookMethod(tableLoad,new StrictHook() {
+        HookDiagnostics.hookMethod(tableLoad,new StrictHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 if (!ai(p.thisObject) || profile.getInt(p.thisObject)==1) return;
                 int kind=profile.getInt(p.thisObject);
@@ -91,7 +92,7 @@ final class AiProfessionalAperture {
                 }
             }
         });
-        XposedBridge.hookMethod(validate,new StrictHook() {
+        HookDiagnostics.hookMethod(validate,new StrictHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 if ((Integer)p.args[0]!=168 || !ai(p.thisObject)
                         || (Boolean)discrete.invoke(p.thisObject)) return;
@@ -103,7 +104,7 @@ final class AiProfessionalAperture {
                 p.setResult(value==-1.0f || value>=values[0] && value<=values[values.length-1]);
             }
         });
-        XposedBridge.hookMethod(effectiveValue,new StrictHook() {
+        HookDiagnostics.hookMethod(effectiveValue,new StrictHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 if ((Integer)p.args[0]!=168 || !current(p.thisObject)
                         || !(Boolean)automatic.invoke(p.thisObject)) return;
@@ -114,19 +115,19 @@ final class AiProfessionalAperture {
                 if (actual!=null) p.setResult(actual);
             }
         });
-        XposedBridge.hookMethod(resolveManager,new StrictHook() {
+        HookDiagnostics.hookMethod(resolveManager,new StrictHook() {
             @Override protected void after(MethodHookParam p) throws Throwable {
                 if (p.hasThrowable() || managerMode.getInt(p.thisObject)!=168) return;
                 Object component=component();
                 if (current(component)) managerComponent.set(p.thisObject,component);
             }
         });
-        XposedBridge.hookMethod(asdConstructor,new StrictHook() {
+        HookDiagnostics.hookMethod(asdConstructor,new StrictHook() {
             @Override protected void after(MethodHookParam p) throws Throwable {
                 if (!p.hasThrowable() && managerMode.getInt(p.args[0])==168) bind(p.thisObject);
             }
         });
-        XposedBridge.hookMethod(append,new StrictHook() {
+        HookDiagnostics.hookMethod(append,new StrictHook() {
             @Override protected void after(MethodHookParam p) throws Throwable {
                 if (p.hasThrowable()) return;
                 Object component=component();
@@ -140,7 +141,7 @@ final class AiProfessionalAperture {
                 bind(value);addInterceptor.invoke(p.args[0],value);
             }
         });
-        XposedBridge.hookMethod(parse,new StrictHook() {
+        HookDiagnostics.hookMethod(parse,new StrictHook() {
             @Override protected void after(MethodHookParam p) throws Throwable {
                 if (p.hasThrowable()) return;
                 Binding binding=binding(p.thisObject);
@@ -159,7 +160,7 @@ final class AiProfessionalAperture {
                 }
             }
         });
-        XposedBridge.hookMethod(consume,new StrictHook() {
+        HookDiagnostics.hookMethod(consume,new StrictHook() {
             @Override protected void after(MethodHookParam p) throws Throwable {
                 if (p.hasThrowable()) return;
                 Binding binding=binding(p.thisObject);

@@ -1,5 +1,7 @@
 package com.aurora.camera.compat;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.app.Activity;
 import android.app.Application;
 import android.content.ContentProvider;
@@ -19,7 +21,6 @@ import com.aurora.camera.compat.filter.LutStore229;
 import com.aurora.camera.compat.sharedlut.LutShare246;
 import com.aurora.camera.compat.sharedlut.LutShare246Client;
 import com.aurora.camera.compat.sharedlut.LutShare257Bootstrap;
-import de.robv.android.xposed.XposedBridge;
 import java.io.File;
 import java.lang.reflect.Method;
 import java.util.Arrays;
@@ -107,7 +108,7 @@ public final class CameraLutShare246Hooks implements HookPlan {
             throw new SecurityException("Imported LUT bootstrap caller is not the signed module UID");
     }
     public void install(){
-        XposedBridge.hookMethod(applicationCreate,new StrictHook(){
+        HookDiagnostics.hookMethod(applicationCreate,new StrictHook(){
             @Override protected void after(MethodHookParam p)throws Throwable{
                 if(p.hasThrowable())return;
                 Application application=(Application)p.thisObject;initialize(application);
@@ -125,7 +126,7 @@ public final class CameraLutShare246Hooks implements HookPlan {
                 LutShare257Bootstrap.connect(application,sync::ready);
             }
         });
-        XposedBridge.hookMethod(bootstrapQuery,new StrictHook(){
+        HookDiagnostics.hookMethod(bootstrapQuery,new StrictHook(){
             @Override protected void before(MethodHookParam p)throws Throwable{
                 if(p.args[0]==null||!BOOTSTRAP.equals(p.args[0].toString()))return;
                 ContentProvider provider=(ContentProvider)p.thisObject;Context owner=provider.getContext();

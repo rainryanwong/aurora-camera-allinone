@@ -1,6 +1,7 @@
 package com.aurora.camera.compat;
 
-import de.robv.android.xposed.XposedBridge;
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -20,7 +21,7 @@ public final class AiStyleLockHooks {
         return new HookPlan() {
             public String id() { return "F25.ai-recommendation-style-isolation"; }
             public void install() {
-                XposedBridge.hookMethod(initParameters, new StrictHook() {
+                HookDiagnostics.hookMethod(initParameters, new StrictHook() {
                     @Override protected void after(MethodHookParam p) throws Throwable {
                         if (p.hasThrowable() || (Integer) p.args[0] != 168) return;
                         // z3.c owns this list; its u0 donor was copied with addAll.

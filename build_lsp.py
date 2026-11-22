@@ -26,8 +26,8 @@ SDK = Path("D:/DevTools/AndroidSdk/platforms/android-37.0/android.jar")
 DEFAULT_KEYSTORE = Path("D:/cam18pm/m3-port/m3-v16-probe-debug.jks")
 PACKAGE = "com.aurora.camera.compat"
 ENTRY = PACKAGE + ".CompatModule"
-VERSION = "0.1.125"
-VERSION_CODE = 10225
+VERSION = "0.2.86"
+VERSION_CODE = 10286
 STOCK_SHA256 = "e25b1ed5581baddd4e1d7f1ae60c1e0f1b1251645df5ba90dfbb9c42953b4a07"
 
 
@@ -137,6 +137,7 @@ def main() -> None:
     manifest = f'''<manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="{PACKAGE}" android:versionCode="{VERSION_CODE}" android:versionName="{VERSION}">
     <uses-sdk android:minSdkVersion="31" android:targetSdkVersion="35"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <queries>
         <package android:name="com.android.camera"/>
         <package android:name="com.miui.mediaeditor"/>
@@ -152,6 +153,11 @@ def main() -> None:
             android:grantUriPermissions="false"/>
         <receiver android:name=".sharedlut.LutShare257Receiver"
             android:process=":lutshare" android:exported="true"/>
+        <provider android:name=".trace.PreviewNotification"
+            android:authorities="com.aurora.camera.compat.preview"
+            android:exported="true" android:permission="android.permission.DUMP"
+            android:grantUriPermissions="false"/>
+        <receiver android:name=".trace.PreviewNotification$Mark" android:exported="false"/>
     </application>
 </manifest>
 '''
@@ -162,8 +168,19 @@ def main() -> None:
     )
     (tree / "assets/xposed_init").write_text(ENTRY + "\n", encoding="utf-8")
 
+    version_source = work / "BuildInfo.java"
+    version_source.write_text(
+        f'package {PACKAGE}; final class BuildInfo {{ static final String VERSION = "{VERSION}"; '
+        f'static final long VERSION_CODE = {VERSION_CODE}L; }}\n',
+        encoding="utf-8",
+    )
+    javac_sources = work / "javac-sources.txt"
+    javac_sources.write_text(
+        "\n".join(f'"{path.as_posix()}"' for path in (version_source, *source_paths, *stub_paths)) + "\n",
+        encoding="utf-8",
+    )
     run([JAVA / "javac.exe", "--release", "8", "-encoding", "UTF-8", "-cp", SDK,
-         "-d", work / "classes", *source_paths, *stub_paths], work, "javac")
+         "-d", work / "classes", "@" + str(javac_sources)], work, "javac")
     # Only com/ is packaged. de/robv/android/xposed remains compile-only.
     run([JAVA / "jar.exe", "cf", work / "module.jar", "-C", work / "classes", "com"], work, "jar")
     with zipfile.ZipFile(work / "module.jar") as module_jar:

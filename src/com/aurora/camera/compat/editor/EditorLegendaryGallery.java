@@ -1,10 +1,11 @@
 package com.aurora.camera.compat.editor;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.ContentProvider;
 import android.os.Bundle;
 import android.util.Log;
 import com.aurora.camera.compat.StrictHook;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Method;
 
 /** Advertise the local Legendary editor to Gallery through its public capability protocol. */
@@ -23,7 +24,7 @@ public final class EditorLegendaryGallery {
 
         Method call = Class.forName(PROVIDER, false, loader)
                 .getDeclaredMethod("call", String.class, String.class, Bundle.class);
-        XposedBridge.hookMethod(call, new StrictHook() {
+        HookDiagnostics.hookMethod(call, new StrictHook() {
             @Override protected void after(MethodHookParam param) {
                 String method = (String) param.args[0];
                 String key;

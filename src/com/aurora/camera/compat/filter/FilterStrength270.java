@@ -1,5 +1,7 @@
 package com.aurora.camera.compat.filter;
 
+import com.aurora.camera.diagnostics.HookDiagnostics;
+
 import android.content.Context;
 import android.util.AttributeSet;
 import android.view.View;
@@ -10,7 +12,6 @@ import android.app.Activity;
 import com.aurora.camera.compat.Host;
 import com.aurora.camera.compat.Options229;
 import com.aurora.camera.compat.StrictHook;
-import de.robv.android.xposed.XposedBridge;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
@@ -141,28 +142,28 @@ public final class FilterStrength270 {
         }
     }
     public void install(){
-        XposedBridge.hookMethod(supported,new StrictHook(){@Override protected void before(MethodHookParam p){
+        HookDiagnostics.hookMethod(supported,new StrictHook(){@Override protected void before(MethodHookParam p){
             if(photo.isInstance(p.thisObject)&&options.enabled(KEY))p.setResult(true);
         }});
         // L9.d's native listener requires a Photo fragment. Route only our private
         // receiver's S8 callback to the CamStyle selection that owns this scale.
-        XposedBridge.hookMethod(degreeChanged,new StrictHook(){@Override protected void before(MethodHookParam p){
+        HookDiagnostics.hookMethod(degreeChanged,new StrictHook(){@Override protected void before(MethodHookParam p){
             Scale scale=(Scale)getAdditionalInstanceField(p.thisObject,KEY);
             if(scale!=null){scale.update((String)p.args[1]);p.setResult(null);}
         }});
-        XposedBridge.hookMethod(init,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
+        HookDiagnostics.hookMethod(init,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
             if(p.hasThrowable()||!options.enabled(KEY))return;
             Scale scale=new Scale(p.thisObject,(LinearLayout)p.args[0]);
             setAdditionalInstanceField(p.thisObject,KEY,scale);
             Object ws=getObjectField(p.thisObject,"V");scale.bind(ws==null?null:callMethod(ws,"g"));
         }});
-        XposedBridge.hookMethod(select,new StrictHook(){@Override protected void after(MethodHookParam p){
+        HookDiagnostics.hookMethod(select,new StrictHook(){@Override protected void after(MethodHookParam p){
             if(!p.hasThrowable()&&bottom.isInstance(p.thisObject)){
                 Scale scale=(Scale)getAdditionalInstanceField(p.thisObject,KEY);
                 if(scale!=null)scale.bind(p.args[0]);
             }
         }});
-        XposedBridge.hookMethod(destroy,new StrictHook(){@Override protected void after(MethodHookParam p){
+        HookDiagnostics.hookMethod(destroy,new StrictHook(){@Override protected void after(MethodHookParam p){
             Scale scale=(Scale)removeAdditionalInstanceField(p.thisObject,KEY);
             if(scale!=null)scale.release();
         }});
