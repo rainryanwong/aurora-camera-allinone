@@ -10,7 +10,7 @@ import java.util.*;
 
 /** Construct the target's real CloudWatermarkConfigData; native fetch/parser/render stay in use. */
 public final class Editor245Templates {
-    private final Host host;
+    private final Editor245Assets assets;
     private final boolean nativeCloud;
     private final Field context, configGroups, configVersion, categoryId, categoryB, categoryC, categoryName, categoryDevices, categoryEntries, entryId, entryCover;
     private final Constructor<?> configConstructor, categoryConstructor, entryConstructor;
@@ -18,7 +18,7 @@ public final class Editor245Templates {
     private volatile Set<String> available = Collections.emptySet();
     private volatile boolean prepared, nativeInitializationFailed;
     public Editor245Templates(Host h) throws ReflectiveOperationException {
-        host = h;
+        assets = new Editor245Assets(h.moduleApkPath);
         nativeCloud = h.usesNativeCloudFilter();
         String prefix = "com.miui.mediaeditor.photo.watermark.model.cloudwatermark.";
         Class<?> config = h.type(prefix + "CloudWatermarkConfigData"), category = h.type(prefix + "CloudCategoryData"), entry = h.type(prefix + "CloudWatermarkData");
@@ -83,7 +83,7 @@ public final class Editor245Templates {
     }
     public void publish() throws Exception {
         Context app = (Context) context.get(null);
-        Editor245Assets.Publication publication = Editor245Assets.publishLocked(app.getFilesDir(), host.moduleApkPath);
+        Editor245Assets.Publication publication = assets.publishLocked(app.getFilesDir());
         available = publication.groups;
         prepared = true;
         nativeInitializationFailed = false;

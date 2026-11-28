@@ -54,8 +54,37 @@ final class DirectorRecording {
         Field themeColors = host.field("f2.e", "c");
         Method color = host.method("f2.e", "a", int.class, boolean.class);
         ThreadLocal<Object> qualityParent = new ThreadLocal<>();
+        Class<?> director = host.type("C3.m");
+        Class<?> manager = host.type("k6.k");
+        Method tagMode = host.method("y3.e", "p", manager);
+        Method videoQuality = host.method("com.android.camera.data.data.n", "w", int.class, int.class);
+        Method cameraFacing = host.method(manager, "n0");
+        Method requestState = host.method(manager, "K0");
+        Field settings = host.field("l9.i0", "a");
+        Field overrideMode = host.field("l9.j0", "K3");
+        Field sessionParams = host.field("l9.i0", "b");
+        Object moduleTag = host.field("ia.y0", "Y").get(null);
+        Method writeTag = host.method("l9.z1", "a", host.type("ia.D0"), Object.class);
 
         Runnable install = () -> {
+            HookDiagnostics.hookMethod(tagMode, new StrictHook() {
+                @Override protected void before(MethodHookParam param) throws ReflectiveOperationException {
+                    if (!director.isInstance(param.thisObject)) return;
+                    int facing = (int)cameraFacing.invoke(param.args[0]);
+                    if ((int)videoQuality.invoke(null, facing, MODE) != 3001) return;
+                    Object state = requestState.invoke(param.args[0]);
+                    int requested = overrideMode.getInt(settings.get(state));
+                    if (requested != 0 && requested != MODE) return;
+                    // Select the physical-lens pro-video tuning for the director's 8K session.
+                    writeTag.invoke(sessionParams.get(state), moduleTag, 180);
+                    param.setResult(null);
+                    param.setObjectExtra("director-8k", true);
+                }
+
+                @Override protected boolean countsAsRun(MethodHookParam param) {
+                    return Boolean.TRUE.equals(param.getObjectExtra("director-8k"));
+                }
+            });
             HookDiagnostics.hookMethod(qualityKey, new StrictHook() {
                 @Override protected void before(MethodHookParam param) {
                     if (countsAsRun(param)) param.setResult("pref_camera_cinemaster_quality");

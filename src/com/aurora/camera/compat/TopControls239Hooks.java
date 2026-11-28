@@ -85,10 +85,7 @@ public final class TopControls239Hooks {
                 ArrayList<Integer> result=new ArrayList<>();
                 for(int i=0;i<chosen.size();i++){
                     int token=chosen.get(i);
-                    // 223 is the already-hidden video watermark. Its old UI-only
-                    // hiding replaced it with an invisible cell, leaving a gap.
-                    if(i<6)result.add(token==223?216:token);
-                    else if(token!=216&&token!=223)result.add(token);
+                    if(i<6||token!=216)result.add(token);
                 }
                 return result;
             }
@@ -131,16 +128,27 @@ public final class TopControls239Hooks {
                     if(token==CCLOCK&&p.method.getName().equals("e"))return;
                     @SuppressWarnings("unchecked") List<Object> previous=(List<Object>)p.getResult();
                     ArrayList<Object> result=new ArrayList<>(previous);
-                    if(token==CCLOCK)result.removeIf(row->(Integer)XposedHelpers.getObjectField(row,"c")==223);
-                    for(Object row:result)if((Integer)XposedHelpers.getObjectField(row,"c")==token){if(!result.equals(previous))p.setResult(result);return;}
+                    for(Object row:result)if((Integer)XposedHelpers.getObjectField(row,"c")==token)return;
                     result.add(token==CCLOCK?cclock(false):factory.invoke(null,APERTURE));p.setResult(result);
                 }};
                 for(Method method:providers)HookDiagnostics.hookMethod(method,provider);
                 HookDiagnostics.hookMethod(available,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
-                    int mode=(Integer)p.args[0],token=id(mode);if(token==0)return;
+                    int mode=(Integer)p.args[0];
                     @SuppressWarnings("unchecked") ArrayList<Integer> values=(ArrayList<Integer>)p.args[1];
+                    if((mode==162||mode==180)&&values.contains(223)
+                            &&(Integer)XposedHelpers.getObjectField(p.thisObject,"mCurrentMode")==mode){
+                        // Older Compat versions removed 223 from the saved layout.
+                        // Append it in the menu without displacing pinned controls.
+                        @SuppressWarnings("unchecked") List<Integer> saved=(List<Integer>)XposedHelpers.callMethod(p.thisObject,"U",mode);
+                        if(!saved.isEmpty()&&!saved.contains(223)){
+                            List<Integer> restored=new ArrayList<>(saved);
+                            while(restored.size()<6)restored.add(216);
+                            restored.add(223);
+                            XposedHelpers.callMethod(p.thisObject,"Y",restored,false);
+                        }
+                    }
+                    int token=id(mode);if(token==0)return;
                     if(!values.contains(token))values.add(token);migrate(p.thisObject,mode,token);
-                    if(token==CCLOCK)Log.i("AuroraTop240","available mode="+mode+" ownerMode="+XposedHelpers.getObjectField(p.thisObject,"mCurrentMode")+" values="+values+" saved="+XposedHelpers.callMethod(p.thisObject,"U",mode));
                 }});
                 HookDiagnostics.hookMethod(rows,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
                     int mode=(Integer)XposedHelpers.getObjectField(p.thisObject,"mCurrentMode");if(mode!=162&&mode!=180)return;

@@ -12,6 +12,8 @@ final class NearRangeUi {
     private static final int PANEL_CONTENT = 7;
     private static final Object[] NO_TIP_DATA = new Object[0];
 
+    private java.lang.ref.WeakReference<Object> lastTip;
+    private boolean lastActive;
     final Method showTip;
     final ThreadLocal<Boolean> rendering = new ThreadLocal<>();
     private final Method tips, tipVisible, baseModule, needNearTip;
@@ -54,10 +56,14 @@ final class NearRangeUi {
         Object tipFragment = protocol(tips);
         if (tipFragment == null || owner(tipFragment) != module) return;
         boolean visible = nearby && canShowTip(module);
-        if (!visible && !(boolean) tipVisible.invoke(tipFragment, TIP_ID)) return;
+        boolean shown = (boolean) tipVisible.invoke(tipFragment, TIP_ID);
+        if (!visible && !shown) return;
+        if (visible && shown && lastTip != null && lastTip.get() == tipFragment && lastActive == active) return;
         rendering.set(visible && active);
         try {
             showTip.invoke(tipFragment, TIP_ID, visible, visible && active, NO_TIP_DATA);
+            if (lastTip == null || lastTip.get() != tipFragment) lastTip = new java.lang.ref.WeakReference<>(tipFragment);
+            lastActive = active;
         } finally {
             rendering.remove();
         }

@@ -1,3 +1,3 @@
 777365d49878d473e31a6af1c0a3b250403311891c99d7bba7a7a821e6f99ba2  /odm/lib64/hw/camera.qcom.so
 00c7142da879cf169875a9fc5137f5caedd3455e24d094205658483e24ffc000  /odm/lib64/hw/camera.qcom.sm8650.so
-d51212b17e9a77e2a58ec07ccfde5bd085d212982aa92f954b5b5a395eb936ed  /odm/lib64/com.qti.feature2.gs.sm8650.so
+446bd8bd21c305a77ac9d3cf358caeb5197cec9e01cc74c171a842eb0f423e4b  /odm/lib64/com.qti.feature2.gs.sm8650.so

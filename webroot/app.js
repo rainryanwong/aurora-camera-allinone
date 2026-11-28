@@ -16,6 +16,10 @@ const mountNames = {
   'natural-photo': '原色拍照后处理',
   night: 'ArcSoft 夜景检测',
   m3: 'M3 滤镜插件与配置',
+  'com.qti.sensormodule.aurora_semco_LYT900_wide.bin': 'Open Gate 主摄读出档位',
+  'com.qti.sensormodule.aurora_semco_imx858_ultra.bin': 'Open Gate 超广角读出档位',
+  'com.qti.sensormodule.aurora_ofilm_imx858_tele3x.bin': 'Open Gate 3.2× 长焦读出档位',
+  'com.qti.sensormodule.aurora_semco_imx858_tele5x.bin': 'Open Gate 5× 长焦读出档位',
   'com.qti.tuned.aurora_semco_LYT900_wide.bin': '原色主摄调校',
   'com.qti.tuned.aurora_semco_imx858_ultra.bin': '原色超广角调校',
   'com.qti.tuned.aurora_ofilm_imx858_tele3x.bin': '原色 3.2× 调校',
@@ -121,6 +125,7 @@ function parse(text) {
         result.mounts.push({id: a, state: b, target: c, source: d});
         break;
       case 'preview': {
+        result.preview = line.slice('preview\t'.length);
         const failed = a === 'native-error' || (['saved', 'stopped', 'incomplete', 'interrupted'].includes(a) && c !== 'ran');
         result.mounts.push({id: 'preview-native', state: failed ? 'mount-error' : a === 'off' ? 'off' : c,
           target: a === 'off' ? '从 WebUI 开始采集后触发' : previewStates[a]?.[0]});
@@ -293,6 +298,7 @@ async function refresh() {
     byId('module-version').textContent = 'Xiaomi 14 Ultra · ' + snapshot.version;
     byId('last-refresh').textContent = '刷新于 ' + snapshot.time;
     render();
+    if (snapshot.preview) renderPreview(snapshot.preview);
   } catch (error) {
     notice('status-message', error.message, 'error');
   } finally {
@@ -398,4 +404,3 @@ for (const button of document.querySelectorAll('[data-filter]')) {
   });
 }
 refresh();
-updatePreview('status');

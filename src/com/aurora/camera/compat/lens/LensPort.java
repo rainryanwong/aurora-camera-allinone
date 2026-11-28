@@ -32,6 +32,7 @@ public final class LensPort implements PhysicalLensRoute.Camera {
     private final Method normalizeCamera, transientData, recordCamera;
     private final Method highPixelRoute, satG, satF, satE, satH;
     private final Method professionalSwitch, baseSwitch, childSwitch, baseBounds, childBounds;
+    private final Method videoPhysicalCamera, eightKSelected, supportsEightK, isRecording;
     private final Field zoomModule;
     private final Method inheritedZoom, specialCapture, specialTest, videoGuard;
     private final Constructor<?> specialMapper;
@@ -95,6 +96,10 @@ public final class LensPort implements PhysicalLensRoute.Camera {
         highPixelRoute=h.method("Pe.b","x1"); satG=h.method("l9.s0","g"); satF=h.method("l9.s0","f");
         satE=h.method("l9.s0","e"); satH=h.method("l9.s0","h");
         Class<?> module=h.type("com.android.camera.module.a0");
+        videoPhysicalCamera=h.method("B2.c","m",int.class,int.class,boolean.class);
+        eightKSelected=h.method("com.android.camera.data.data.n","t0",int.class);
+        supportsEightK=h.method("l9.s0","i",int.class);
+        isRecording=h.method(module,"isRecording");
         professionalSwitch=h.method(zoomType,"J9",float.class,float.class,int.class,int.class,module);
         baseSwitch=h.method(zoomType,"K7",float.class,float.class,module);
         childSwitch=h.method("j9.z","K7",float.class,float.class,module);
@@ -142,6 +147,22 @@ public final class LensPort implements PhysicalLensRoute.Camera {
     }
 
     public void install() {
+        HookDiagnostics.hookMethod(videoPhysicalCamera,new LensHook() {
+            @Override protected void after(MethodHookParam p) throws ReflectiveOperationException {
+                int mode=(int)p.args[1];
+                if (p.hasThrowable() || (int)p.args[0]!=0 || mode!=162 || (int)p.getResult()!=tele()
+                        || !(boolean)eightKSelected.invoke(null,mode)
+                        || selectedZoom(mode)<(float)standaloneZoom.invoke(null)) return;
+                int periscope=standalone();
+                if ((boolean)supportsEightK.invoke(null,periscope)) {
+                    p.setResult(periscope);
+                    p.setObjectExtra("eightKPeriscope", Boolean.TRUE);
+                }
+            }
+            @Override protected boolean countsAsRun(MethodHookParam p) {
+                return Boolean.TRUE.equals(p.getObjectExtra("eightKPeriscope"));
+            }
+        });
         HookDiagnostics.hookMethod(B2resolve,new LensHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 if ((int)p.args[0]!=0) return;
@@ -177,7 +198,22 @@ public final class LensPort implements PhysicalLensRoute.Camera {
         ObservedHook switching=new LensHook() {
             @Override protected void before(MethodHookParam p) throws Throwable {
                 int result=route.switchLens((float)p.args[0],(float)p.args[1],p.args[2]);
-                if (result>=0) p.setResult(result!=0);
+                if (result>=0) {
+                    p.setResult(result!=0);
+                    return;
+                }
+                Object module=p.args[2];
+                if (module==null || mode(module)!=162 || !(boolean)eightKSelected.invoke(null,162)
+                        || !rear(module) || (boolean)isRecording.invoke(module)) return;
+                float from=(float)p.args[0], to=(float)p.args[1];
+                float threshold=(float)standaloneZoom.invoke(null);
+                if ((from>=threshold)==(to>=threshold)) return;
+                int current=actual(module), periscope=standalone();
+                if (to>=threshold && current==tele() && (boolean)supportsEightK.invoke(null,periscope)
+                        || to<threshold && current==periscope) {
+                    reopen.invoke(null,module,false);
+                    p.setResult(true);
+                }
             }
         };
         HookDiagnostics.hookMethod(baseSwitch,switching); HookDiagnostics.hookMethod(childSwitch,switching);

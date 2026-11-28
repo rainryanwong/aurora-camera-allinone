@@ -30,7 +30,8 @@ final class NearRangeLensHooks implements HookPlan {
     private static final String HANDLED = STATE + ".handled";
     private static final String TAG = "AuroraNearRangeLens";
     private static final int PHOTO = 163;
-    private static final int REAR_SAT = 6;
+    private static final int AI_PHOTO = 168;
+    private static final String DEVICE_OWNER = STATE + ".owner";
     private static final int UPDATE_FALLBACK = 77;
     private static final int DIRECT_ZOOM = 25;
     private static final int NATIVE_NEAR_CLICK = 12;
@@ -47,11 +48,16 @@ final class NearRangeLensHooks implements HookPlan {
     private static final CaptureResult.Key<byte[]> TOF =
             new CaptureResult.Key<>("xiaomi.sat.tofInfo.tofData", byte[].class);
 
+    private volatile int enterDistance = DEFAULT_ENTER_CM;
+    private volatile int exitDistance = DEFAULT_EXIT_CM;
     private final Options229 options;
     private final MiuixDialogs dialogs;
     private final MiuixSeekBar241 sliders;
     private final Method settings, update, preview, inactive, nearClick;
-    private final Method nativeEnabled, photoEnabled, moduleIndex, cameraId, alive, busy;
+    private final Method nativeEnabled, photoEnabled, moduleIndex, alive, busy;
+    private final Method capabilities, physicalIds, supported, registry, teleId, zoomRange;
+    private final Method streetMode, streetTable, wideFinder, streetRing, selectFocal, focalLength;
+    private final Field deviceConfig, streetZoom, finderZoom;
     private final Method getDevice, setFallbackDisabled, getZoom, ratio, changeZoom, saveZoom;
     private final Field managerModule, clickKind;
     private final NearRangeUi ui;
@@ -69,7 +75,22 @@ final class NearRangeLensHooks implements HookPlan {
         update = host.method("k6.e", "f1", int.class);
         managerModule = host.field("k6.e", "b");
         getDevice = host.method("k6.e", "T");
-        setFallbackDisabled = host.method("l9.a", "r0", boolean.class);
+        setFallbackDisabled = host.method("l9.y0", "r0", boolean.class);
+        capabilities = host.method("l9.a", "q");
+        physicalIds = host.method("l9.g", "J");
+        supported = host.method("l9.h", "o5", host.type("l9.g"));
+        registry = host.method("v6.f", "R");
+        teleId = host.method("v6.f", "q");
+        zoomRange = host.method(zoom, "H0");
+        streetMode = host.method("com.android.camera.module.c0", "l", int.class);
+        deviceConfig = host.field("Pe.b$b", "a");
+        streetTable = host.method("Pe.b", "f");
+        wideFinder = host.method("com.android.camera.data.data.n", "A");
+        streetZoom = host.field("Re.b", "b");
+        finderZoom = host.field("Re.b", "a");
+        streetRing = host.method("R6.H1", "a");
+        selectFocal = host.method("R6.H1", "Yl", int.class, int.class);
+        focalLength = host.method("com.android.camera.data.data.n", "k", float.class, int.class);
         preview = host.method(module, "onPreviewMetaDataUpdate", CaptureResult.class);
         inactive = host.method(module, "onInactive");
         nativeEnabled = host.method("com.android.camera.data.data.x", "q0");
@@ -77,7 +98,7 @@ final class NearRangeLensHooks implements HookPlan {
         nearClick = host.method("H4.x", "accept", Object.class);
         clickKind = host.field("H4.x", "a");
         moduleIndex = host.method(module, "getModuleIndex");
-        cameraId = host.method(module, "getActualCameraId");
+
         alive = host.method(module, "isDeviceAndModuleAlive");
         busy = host.method("com.android.camera.module.Camera2Module", "isDoingAction");
         getZoom = host.method(module, "getZoomManager");
@@ -110,19 +131,27 @@ final class NearRangeLensHooks implements HookPlan {
             @Override protected void before(MethodHookParam param) throws ReflectiveOperationException {
                 if ((Integer) param.args[0] != UPDATE_FALLBACK) return;
                 Object module = managerModule.get(param.thisObject);
-                if (ownsNearRange(module)) {
-                    Object device = getDevice.invoke(param.thisObject);
-                    if (device != null) {
-                        setFallbackDisabled.invoke(device, true);
-                        param.setResult(true);
-                    }
-                }
+                Object device = getDevice.invoke(param.thisObject);
+                if (device != null && busy.getDeclaringClass().isInstance(module)) bind(module, device);
+            }
+        });
+        HookDiagnostics.hookMethod(setFallbackDisabled, new StrictHook() {
+            @Override protected void before(MethodHookParam param) throws ReflectiveOperationException {
+                Object device = param.thisObject;
+                ZoomState state = (ZoomState) XposedHelpers.getAdditionalInstanceField(device, DEVICE_OWNER);
+                if (state == null) return;
+                boolean enabled = !(boolean) param.args[0] && options.enabled(KEY)
+                        && (boolean) nativeEnabled.invoke(null);
+                boolean wasEnabled = state.enabled;
+                state.enabled = enabled;
+                if (enabled) param.args[0] = true;
+                else if (wasEnabled) main.post(() -> endRoute(state));
             }
         });
         HookDiagnostics.hookMethod(ui.showTip, new ObservedHook() {
             @Override protected void runBefore(MethodHookParam param) throws ReflectiveOperationException {
                 if ((int) param.args[0] != NearRangeUi.TIP_ID || ui.rendering.get() != null
-                        || !ownsNearRange(ui.owner(param.thisObject))) return;
+                        || !ownsTip(ui.owner(param.thisObject))) return;
                 // The stock near-range interceptor drives this slot from the ultrawide HAL role.
                 param.setResult(null);
                 param.setObjectExtra(HANDLED, Boolean.TRUE);
@@ -135,7 +164,7 @@ final class NearRangeLensHooks implements HookPlan {
         HookDiagnostics.hookMethod(photoEnabled, new ObservedHook() {
             @Override protected void runBefore(MethodHookParam param) {
                 Boolean rendering = ui.rendering.get();
-                if ((int) param.args[0] == PHOTO && rendering != null) {
+                if (hasTip((int) param.args[0]) && rendering != null) {
                     param.setResult(rendering);
                     param.setObjectExtra(HANDLED, Boolean.TRUE);
                 }
@@ -149,7 +178,7 @@ final class NearRangeLensHooks implements HookPlan {
             @Override protected void runBefore(MethodHookParam param) throws ReflectiveOperationException {
                 if (clickKind.getInt(param.thisObject) != NATIVE_NEAR_CLICK) return;
                 Object module = param.args[0];
-                if (!ownsNearRange(module)) return;
+                if (!ownsTip(module)) return;
                 param.setResult(null);
                 ZoomState state = stateOf(module);
                 if (state == null || !state.nearby() || !(boolean) alive.invoke(module)
@@ -157,7 +186,7 @@ final class NearRangeLensHooks implements HookPlan {
                 Object zoom = getZoom.invoke(module);
                 if ((float) ratio.invoke(zoom) != state.expectedZoom()) return;
                 boolean wasTele = !state.mainSelected;
-                if (switchZoom(zoom, wasTele ? 1f : TELE_ZOOM, state.distance)) {
+                if (switchZoom(zoom, state, wasTele ? state.previous : state.target, state.distance)) {
                     state.mainSelected = wasTele;
                     state.samples = 0;
                     ui.showToggleMessage(wasTele);
@@ -170,40 +199,99 @@ final class NearRangeLensHooks implements HookPlan {
             }
         });
         HookDiagnostics.hookMethod(preview, new ObservedHook() {
+            private volatile boolean sampled;
             @Override protected void runAfter(MethodHookParam param) throws ReflectiveOperationException {
                 CaptureResult result = (CaptureResult) param.args[0];
                 Object module = param.thisObject;
-                if (param.hasThrowable() || result == null || result.getFrameNumber() % 3 != 0
-                        || !isRearPhoto(module) || (!options.enabled(KEY) && stateOf(module) == null)) return;
+                if (param.hasThrowable() || result == null || result.getFrameNumber() % 3 != 0) return;
+                ZoomState state = stateOf(module);
+                if (state == null || !state.enabled) return;
                 float distance = distanceCm(result.get(TOF));
-                main.post(() -> updateZoom(module, distance));
-                param.setObjectExtra(HANDLED, Boolean.TRUE);
+                if (!sampled) sampled = true;
+                offerSample(module, state, distance);
             }
 
             @Override protected boolean countsAsRun(MethodHookParam param) {
-                return Boolean.TRUE.equals(param.getObjectExtra(HANDLED));
+                return sampled;
             }
         });
         HookDiagnostics.hookMethod(inactive, new StrictHook() {
             @Override protected void before(MethodHookParam param) throws ReflectiveOperationException {
                 ZoomState state = (ZoomState) XposedHelpers.removeAdditionalInstanceField(param.thisObject, STATE);
-                if (state != null && state.nearby() && !state.mainSelected) {
+                if (state == null) return;
+                detach(state);
+                if (state.nearby() && !state.mainSelected) {
                     Object zoom = getZoom.invoke(param.thisObject);
-                    if (zoom != null && (Float) ratio.invoke(zoom) == TELE_ZOOM) {
-                        saveZoom.invoke(null, state.previous, PHOTO);
+                    if (zoom != null && (Float) ratio.invoke(zoom) == state.target) {
+                        saveZoom.invoke(null, state.previous, state.mode);
                     }
                 }
             }
         });
     }
 
-    private boolean isRearPhoto(Object module) throws ReflectiveOperationException {
-        return module != null && (Integer) moduleIndex.invoke(module) == PHOTO
-                && (Integer) cameraId.invoke(module) == REAR_SAT;
+    @SuppressWarnings("unchecked")
+    private void bind(Object module, Object device) throws ReflectiveOperationException {
+        ZoomState prior = stateOf(module);
+        if (prior != null && prior.device.get() == device) return;
+        if (prior != null) {
+            detach(prior);
+            XposedHelpers.removeAdditionalInstanceField(module, STATE);
+        }
+        if (!options.enabled(KEY)) return;
+        Object caps = capabilities.invoke(device);
+        if (!(boolean) supported.invoke(null, caps)) return;
+        Object rearTele = teleId.invoke(registry.invoke(null));
+        if (!((java.util.Set<?>) physicalIds.invoke(caps)).contains(String.valueOf(rearTele))) return;
+        int mode = (int) moduleIndex.invoke(module);
+        float target = TELE_ZOOM;
+        if ((boolean) streetMode.invoke(null, mode)) {
+            android.util.SparseArray<?> table = (android.util.SparseArray<?>) streetTable.invoke(deviceConfig.get(null));
+            Object entry = table == null ? null : table.get(75);
+            if (entry == null) return;
+            target = ((boolean) wideFinder.invoke(null) ? finderZoom : streetZoom).getFloat(entry);
+        }
+        Object zoom = getZoom.invoke(module);
+        android.util.Range<Float> range = zoom == null ? null : (android.util.Range<Float>) zoomRange.invoke(zoom);
+        if (range == null || !range.contains(target)) return;
+        SharedPreferences prefs = options.prefs();
+        enterDistance = prefs.getInt(ENTER_KEY, DEFAULT_ENTER_CM);
+        exitDistance = prefs.getInt(EXIT_KEY, DEFAULT_EXIT_CM);
+        ZoomState state = new ZoomState(module, device, mode, target);
+        XposedHelpers.setAdditionalInstanceField(module, STATE, state);
+        XposedHelpers.setAdditionalInstanceField(device, DEVICE_OWNER, state);
     }
 
-    private boolean ownsNearRange(Object module) throws ReflectiveOperationException {
-        return options.enabled(KEY) && isRearPhoto(module) && (Boolean) nativeEnabled.invoke(null);
+    private static void detach(ZoomState state) {
+        state.enabled = false;
+        Object device = state.device.get();
+        if (device != null && XposedHelpers.getAdditionalInstanceField(device, DEVICE_OWNER) == state)
+            XposedHelpers.removeAdditionalInstanceField(device, DEVICE_OWNER);
+    }
+
+    private void endRoute(ZoomState state) {
+        Object module = state.module.get();
+        if (module == null || stateOf(module) != state || state.enabled) return;
+        try {
+            if (state.nearby() && !state.mainSelected && (boolean) alive.invoke(module)) {
+                Object zoom = getZoom.invoke(module);
+                if ((float) ratio.invoke(zoom) == state.target) switchZoom(zoom, state, state.previous, state.distance);
+            }
+            state.leave();
+            state.manualOverride = false;
+            if (hasTip(state.mode)) ui.renderTip(module, false, false);
+        } catch (ReflectiveOperationException error) {
+            Log.e(TAG, "Unable to leave near-range zoom", error);
+        }
+    }
+
+    private static boolean hasTip(int mode) {
+        return mode == PHOTO || mode == AI_PHOTO;
+    }
+
+    private static boolean ownsTip(Object module) {
+        ZoomState state = module == null ? null : stateOf(module);
+        return state != null && state.enabled && hasTip(state.mode);
     }
 
     private static ZoomState stateOf(Object module) {
@@ -263,6 +351,8 @@ final class NearRangeLensHooks implements HookPlan {
                     Object root = XposedHelpers.getObjectField(fragment, "mPreferenceGroup");
                     Object row = XposedHelpers.callMethod(root, "k0", DISTANCE_ROW);
                     XposedHelpers.callMethod(row, "c0", distanceSummary());
+                    enterDistance = enterCm;
+                    exitDistance = exitCm;
                     Log.i(TAG, "enterCm=" + enterCm + " exitCm=" + exitCm);
                 }).show();
     }
@@ -290,30 +380,48 @@ final class NearRangeLensHooks implements HookPlan {
         return cm > 0f ? cm : Float.NaN;
     }
 
-    private void updateZoom(Object module, float distance) {
-        try {
-            if (!(Boolean) alive.invoke(module)) return;
-            ZoomState state = stateOf(module);
-            if (!ownsNearRange(module)) {
-                if (state != null) {
-                    XposedHelpers.removeAdditionalInstanceField(module, STATE);
-                    if (state.nearby()) ui.renderTip(module, false, false);
-                }
+    private void offerSample(Object module, ZoomState state, float distance) {
+        synchronized (state) {
+            if (!state.pending && !state.processing && state.idle && !(distance <= enterDistance)) return;
+            state.latest = distance;
+            if (state.pending) {
+                state.skipped = true;
                 return;
             }
+            state.pending = true;
+        }
+        main.post(() -> {
+            float latest;
+            synchronized (state) {
+                latest = state.latest;
+                // Discard an interrupted sample sequence instead of combining stale distances.
+                if (state.skipped) state.samples = 0;
+                state.skipped = false;
+                state.pending = false;
+                state.processing = true;
+            }
+            try {
+                updateZoom(module, state, latest);
+            } finally {
+                synchronized (state) {
+                    state.idle = !state.nearby() && !state.manualOverride && state.samples == 0;
+                    state.processing = false;
+                }
+            }
+        });
+    }
+
+    private void updateZoom(Object module, ZoomState state, float distance) {
+        try {
+            if (!state.enabled || stateOf(module) != state || !(Boolean) alive.invoke(module)) return;
             if ((Boolean) busy.invoke(module)) {
-                if (state != null && state.nearby()) ui.renderTip(module, false, false);
+                if (hasTip(state.mode) && state.nearby()) ui.renderTip(module, false, false);
                 return;
             }
             Object zoom = getZoom.invoke(module);
             float current = (Float) ratio.invoke(zoom);
-            SharedPreferences prefs = options.prefs();
-            int exitCm = prefs.getInt(EXIT_KEY, DEFAULT_EXIT_CM);
-            if (state == null) {
-                state = new ZoomState();
-                XposedHelpers.setAdditionalInstanceField(module, STATE, state);
-                ui.renderTip(module, false, false);
-            }
+            int exitCm = exitDistance;
+
             state.distance = distance;
             boolean wasNearby = state.nearby();
             if (wasNearby) {
@@ -321,31 +429,58 @@ final class NearRangeLensHooks implements HookPlan {
                     state.leave();
                     state.manualOverride = true;
                 } else if (state.stable(distance > exitCm)
-                        && (state.mainSelected || switchZoom(zoom, state.previous, distance))) {
+                        && (state.mainSelected || switchZoom(zoom, state, state.previous, distance))) {
                     state.leave();
                 }
             } else if (state.manualOverride) {
                 if (state.stable(distance > exitCm)) state.manualOverride = false;
-            } else if (state.stable(current >= 1f && current < NEAR_ZOOM_LIMIT
-                    && distance <= prefs.getInt(ENTER_KEY, DEFAULT_ENTER_CM))
-                    && switchZoom(zoom, TELE_ZOOM, distance)) {
+            } else if (state.stable(current >= 1f && current < Math.min(NEAR_ZOOM_LIMIT, state.target)
+                    && distance <= enterDistance)
+                    && switchZoom(zoom, state, state.target, distance)) {
                 state.previous = current;
             }
-            if (wasNearby || state.nearby()) ui.renderTip(module, state.nearby(), !state.mainSelected);
+            if (hasTip(state.mode) && (wasNearby || state.nearby())) ui.renderTip(module, state.nearby(), !state.mainSelected);
         } catch (ReflectiveOperationException error) {
-            Log.e(TAG, "Unable to update near-range zoom or its native button", error);
+            if (!state.sampleErrorLogged) {
+                state.sampleErrorLogged = true;
+                Log.e(TAG, "Unable to update near-range zoom or its native button", error);
+            }
         }
     }
 
-    private boolean switchZoom(Object zoom, float target, float distance) throws ReflectiveOperationException {
+    private boolean switchZoom(Object zoom, ZoomState state, float target, float distance) throws ReflectiveOperationException {
         changeZoom.invoke(zoom, target, DIRECT_ZOOM);
         if ((Float) ratio.invoke(zoom) != target) return false;
-        ui.refreshZoomLabel();
+        if ((boolean) streetMode.invoke(null, state.mode)) {
+            Object ring = ((java.util.Optional<?>) streetRing.invoke(null)).orElse(null);
+            if (ring != null) {
+                int mm = target == state.target ? 75 : (int) focalLength.invoke(null, target, state.mode);
+                selectFocal.invoke(ring, mm, DIRECT_ZOOM);
+            }
+        } else {
+            ui.refreshZoomLabel();
+        }
         Log.i(TAG, "zoom=" + target + " distanceCm=" + distance);
         return true;
     }
 
     private static final class ZoomState {
+        final java.lang.ref.WeakReference<Object> module, device;
+        final int mode;
+        final float target;
+        volatile boolean enabled;
+        boolean pending, processing, skipped;
+        boolean idle = true;
+        float latest;
+        boolean sampleErrorLogged;
+
+        ZoomState(Object module, Object device, int mode, float target) {
+            this.module = new java.lang.ref.WeakReference<>(module);
+            this.device = new java.lang.ref.WeakReference<>(device);
+            this.mode = mode;
+            this.target = target;
+        }
+
         float previous;
         float distance;
         int samples;
@@ -364,7 +499,7 @@ final class NearRangeLensHooks implements HookPlan {
         }
 
         float expectedZoom() {
-            return mainSelected ? 1f : TELE_ZOOM;
+            return mainSelected ? previous : target;
         }
 
         void leave() {

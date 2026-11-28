@@ -32,11 +32,13 @@ public final class M3Preview260 {
     private final Host host;
     private final Method global,mode,repository,component,value,controller,engine,shader,initialize,hasRender,render,release,metadata;
     private final Method config,update,draw,sdkRelease,bindFramebuffer,bufferWidth,bufferHeight,bufferTexture,bufferFbo,swap;
+    private final Method active,inactive;
     private final Field intent,mainEngine,oes,textureTarget,program,ready,buffers,input,output,rendererEngine,handle;
     private final Constructor<?> sdkConstructor;
     private final Class<?> legend;
     private final List<Method> draws=new ArrayList<>();
     private volatile Exposure exposure;
+    private volatile Object activeModule;
     private M3Parameters260 parameters;
     private static final class Exposure {final int lux;final float zoom;Exposure(int lux,float zoom){this.lux=lux;this.zoom=zoom;}}
     public M3Preview260(Host h)throws ReflectiveOperationException{
@@ -48,6 +50,8 @@ public final class M3Preview260 {
         hasRender=h.method("Iu.s","l");render=h.method("Iu.s","e",boolean.class);ready=h.field("Iu.s","f0");buffers=h.field("Iu.s","D");input=h.field("Ju.a","a");output=h.field("Ju.a","b");swap=h.method("Ju.a","d");
         bufferWidth=h.method("Ju.b","d");bufferHeight=h.method("Ju.b","b");bufferTexture=h.method("Ju.b","c");bufferFbo=h.method("Ju.b","a");
         release=h.method("Tu.w","f");rendererEngine=h.field("Tu.x","c");metadata=h.method("l9.y0$k","onCaptureCompleted",CameraCaptureSession.class,CaptureRequest.class,TotalCaptureResult.class);
+        active=h.method("com.android.camera.features.mode.legendary.LegendaryModule","onActive");
+        inactive=h.method("com.android.camera.module.Camera2Module","onInactive");
         Class<?> sdk=h.type("com.xiaomi.milab.filtersdk.CandySDK");sdkConstructor=sdk.getDeclaredConstructor(int.class);sdkConstructor.setAccessible(true);handle=h.field(sdk,"a");
         config=h.method(sdk,"configPipeline",long.class,String.class);update=h.method(sdk,"updatePipeline",long.class,String.class);draw=h.method(sdk,"d",float[].class,int.class,int.class,int.class,int.class,float[].class);sdkRelease=h.method(sdk,"e");
         bindFramebuffer=h.method("com.xiaomi.gl.MIGL","glBindFramebuffer",int.class);
@@ -57,6 +61,7 @@ public final class M3Preview260 {
         return owner==null?null:engine.invoke(owner);
     }
     private boolean m3()throws ReflectiveOperationException{
+        if(activeModule==null)return false;
         Object data=global.invoke(null);if((Integer)mode.invoke(data,intent.getInt(data))!=256)return false;
         return "M3".equals(value.invoke(component.invoke(repository.invoke(null),legend),256));
     }
@@ -69,6 +74,12 @@ public final class M3Preview260 {
         try(ZipFile apk=new ZipFile(host.moduleApkPath);InputStream in=apk.getInputStream(apk.getEntry("assets/legend260/leica_filter_param_m3.bin"));ByteArrayOutputStream out=new ByteArrayOutputStream()){
             byte[] buffer=new byte[8192];for(int n;(n=in.read(buffer))!=-1;)out.write(buffer,0,n);parameters=new M3Parameters260(out.toByteArray());
         }
+        HookDiagnostics.hookMethod(active,new StrictHook(){@Override protected void after(MethodHookParam p){
+            if(!p.hasThrowable()){exposure=null;activeModule=p.thisObject;}
+        }});
+        HookDiagnostics.hookMethod(inactive,new StrictHook(){@Override protected void before(MethodHookParam p){
+            if(activeModule==p.thisObject){activeModule=null;exposure=null;}
+        }});
         HookDiagnostics.hookMethod(shader,new StrictHook(){@Override protected void after(MethodHookParam p){if(!p.hasThrowable()&&(Integer)p.args[0]==2)p.setResult(inject((String)p.getResult()));}});
         HookDiagnostics.hookMethod(initialize,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
             if(p.hasThrowable()||textureTarget.getInt(p.thisObject)!=36197)return;
@@ -76,7 +87,8 @@ public final class M3Preview260 {
         }});
         for(Method method:draws)HookDiagnostics.hookMethod(method,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
             if(textureTarget.getInt(p.thisObject)!=36197)return;
-            Object owner=main();boolean enabled=owner!=null&&oes.get(owner)==p.thisObject&&m3();
+            Object owner=activeModule==null?null:main();
+            boolean enabled=owner!=null&&oes.get(owner)==p.thisObject&&m3();
             ((Uniform)XposedHelpers.getAdditionalInstanceField(p.thisObject,UNIFORM)).apply(enabled);
         }});
         HookDiagnostics.hookMethod(metadata,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
@@ -85,9 +97,10 @@ public final class M3Preview260 {
             byte[] aec=result.get(AEC);Float zoom=result.get(CaptureResult.CONTROL_ZOOM_RATIO);if(aec==null||aec.length<100||zoom==null)return;
             float lux=ByteBuffer.wrap(aec).order(ByteOrder.LITTLE_ENDIAN).getFloat(96);
             if(!Float.isFinite(lux)||lux<0||lux>65535||!Float.isFinite(zoom)||zoom<=0)throw new IllegalArgumentException("Invalid M3 preview exposure metadata");
-            exposure=new Exposure((int)lux,zoom);
+            Exposure previous=exposure;
+            if(previous==null||previous.lux!=(int)lux||previous.zoom!=zoom)exposure=new Exposure((int)lux,zoom);
         }});
-        HookDiagnostics.hookMethod(hasRender,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{if(!p.hasThrowable()&&p.thisObject==main()&&m3())p.setResult(true);}});
+        HookDiagnostics.hookMethod(hasRender,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{if(!p.hasThrowable()&&activeModule!=null&&p.thisObject==main()&&m3())p.setResult(true);}});
         HookDiagnostics.hookMethod(render,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
             Exposure current=exposure;if(p.hasThrowable()||current==null||!ready.getBoolean(p.thisObject)||p.thisObject!=main()||!m3())return;
             Preview preview=(Preview)XposedHelpers.getAdditionalInstanceField(p.thisObject,PREVIEW);
@@ -110,15 +123,22 @@ public final class M3Preview260 {
     }
     private final class Preview {
         final Object sdk;final long id;String configuration;boolean observed;
+        private Exposure configuredExposure;
+        private final float[] area=new float[4];
         final float[] identity={1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};
         Preview()throws ReflectiveOperationException{sdk=sdkConstructor.newInstance(6);id=handle.getLong(sdk);if(id==0)throw new IllegalStateException("M3 preview renderer initialization failed");}
         void render(Object owner,Exposure exposure)throws ReflectiveOperationException{
             Object pair=buffers.get(owner),from=input.get(pair),to=output.get(pair);int width=(Integer)bufferWidth.invoke(from),height=(Integer)bufferHeight.invoke(from);
-            String next=parameters.configuration(width,height,exposure.lux,exposure.zoom);
-            if(!next.equals(configuration)){
-                if(!(Boolean)(configuration==null?config:update).invoke(null,id,next))throw new IllegalStateException("M3 preview CvStyle configuration failed");configuration=next;
+            if(exposure!=configuredExposure||width!=area[2]||height!=area[3]){
+                String next=parameters.configuration(width,height,exposure.lux,exposure.zoom);
+                if(!next.equals(configuration)){
+                    if(!(Boolean)(configuration==null?config:update).invoke(null,id,next))throw new IllegalStateException("M3 preview CvStyle configuration failed");
+                    configuration=next;
+                }
+                configuredExposure=exposure;
+                area[2]=width;area[3]=height;
             }
-            draw.invoke(sdk,identity,(Integer)bufferTexture.invoke(from),(Integer)bufferFbo.invoke(to),width,height,new float[]{0,0,width,height});bindFramebuffer.invoke(null,0);swap.invoke(pair);
+            draw.invoke(sdk,identity,(Integer)bufferTexture.invoke(from),(Integer)bufferFbo.invoke(to),width,height,area);bindFramebuffer.invoke(null,0);swap.invoke(pair);
             if(!observed){observed=true;Log.i(TAG,"M3 CvStyle preview rendered lux="+exposure.lux+" zoom="+exposure.zoom+" size="+width+"x"+height);}
         }
     }

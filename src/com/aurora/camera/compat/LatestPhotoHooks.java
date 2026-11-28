@@ -11,6 +11,7 @@ import android.os.SystemClock;
 import android.util.Log;
 import android.widget.Toast;
 import com.aurora.camera.compat.legend.M3SaveCompletion261;
+import com.aurora.camera.compat.legend.M3CaptureSession;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -42,7 +43,8 @@ public final class LatestPhotoHooks {
         final Field moduleIndex = host.field("com.android.camera.module.u", "mModuleIndex");
         final Gate gate = new Gate(camera, activity, departed, wait,
                 cannotOpen, thumbnail, item, uri, click);
-        final M3SaveCompletion261 m3 = new M3SaveCompletion261(host, gate::saved);
+        final M3SaveCompletion261 m3 = new M3SaveCompletion261(host, gate::saved, LatestPhotoHooks::sameImage);
+        final M3CaptureSession m3Session = new M3CaptureSession(host);
         if (start.getReturnType() != boolean.class || click.getReturnType() != void.class
                 || pause.getReturnType() != void.class || dispatch.getReturnType() != void.class
                 || activity.getReturnType() != Optional.class || departed.getReturnType() != boolean.class
@@ -58,6 +60,7 @@ public final class LatestPhotoHooks {
             public String id() { return "F26.latest-photo-identity"; }
             public void install() {
                 m3.install();
+                m3Session.install(m3);
                 final ThreadLocal<Object> captureScope = new ThreadLocal<>();
                 HookDiagnostics.hookMethod(start, new StrictHook() {
                     @Override protected void before(MethodHookParam p) {
@@ -74,8 +77,11 @@ public final class LatestPhotoHooks {
                         // Only q1 reached from this very Camera2Module.startNormalCapture.
                         // Earlier capture guards and other modules' q1 calls remain untouched.
                         Object owner = captureScope.get();
-                        if (owner != null && owner == p.args[0])
-                            gate.capture(owner, moduleIndex.getInt(owner) == 256 && m3.selected());
+                        if (owner != null && owner == p.args[0]) {
+                            int mode = moduleIndex.getInt(owner);
+                            if (mode == 163) m3Session.markPhotoCapture(p.thisObject);
+                            gate.capture(owner, mode == 256 && m3.selected());
+                        }
                     }
                 });
                 HookDiagnostics.hookMethod(click, new StrictHook() {

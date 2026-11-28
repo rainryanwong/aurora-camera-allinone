@@ -24,6 +24,7 @@ public final class EditorMore246Repository {
         Materialized(LutShare246.Row row, File file) { this.row=row; this.file=file; }
     }
     private final Handler main = new Handler(Looper.getMainLooper());
+    private final LutShare246Client.Materializer materializer = new LutShare246Client.Materializer();
     private final ExecutorService worker = Executors.newSingleThreadExecutor(r -> {
         Thread t=new Thread(r,"AuroraEditorMore246-io"); t.setDaemon(true); return t;
     });
@@ -74,10 +75,11 @@ public final class EditorMore246Repository {
                 LutShare246.Catalog catalog=LutShare246Client.read(ownerContext);
                 List<Materialized> complete=new ArrayList<>();
                 for (LutShare246.Row row:catalog.rows)
-                    complete.add(new Materialized(row,LutShare246Client.materialize(ownerContext,row)));
+                    complete.add(new Materialized(row,materializer.materialize(ownerContext,row)));
                 Collections.sort(complete,(a,b) -> Integer.compare(a.row.order,b.row.order));
                 List<Materialized> ready=Collections.unmodifiableList(complete);
                 writeCache(ownerContext,ready);
+                materializer.retain(catalog.rows);
                 deliver(owner,ready);
             } catch (IOException failure) {
                 // A transport/copy error is not an empty successful publication.
@@ -117,7 +119,7 @@ public final class EditorMore246Repository {
             Files.move(temporary,destination.toPath(),StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING);
         } finally { Files.deleteIfExists(temporary); }
     }
-    private static List<Materialized> readCache(Context context) throws IOException {
+    private List<Materialized> readCache(Context context) throws IOException {
         File file=cache(context); if (!file.exists()) return null;
         if (file.length()>LutShare246.MAX_CATALOG_BYTES) throw new IOException("Cached catalog exceeds filter contract");
         List<Materialized> result=new ArrayList<>(); Set<String> ids=new HashSet<>();
@@ -129,9 +131,8 @@ public final class EditorMore246Repository {
                 try { row=LutShare246.Row.read(input,magic==MAGIC+1); }
                 catch (IllegalArgumentException invalid) { throw new IOException("Invalid cached row",invalid); }
                 if (!ids.add(row.id)) throw new IOException("Duplicate cached LUT id");
-                File png=new File(new File(context.getFilesDir(),"lutshare246"),row.revision+".png");
-                if (!png.isFile() || !row.revision.equals(LutShare246.sha256(png)))
-                    throw new IOException("Cached PNG missing or corrupt: "+row.id);
+                File png=materializer.cached(context,row);
+                if (png==null) throw new IOException("Cached PNG missing: "+row.id);
                 result.add(new Materialized(row,png));
             }
             if (input.read()!=-1) throw new IOException("Trailing cached catalog bytes");

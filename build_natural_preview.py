@@ -71,6 +71,20 @@ CONTINUITY_ROUTES = (
       for sensor in sorted({sensor for sensors in SCENE42_SENSORS.values() for sensor in sensors})
       for source, private in ((0, 83), (28, 84))),
 )
+# Readouts with a Scene 0 Natural reference and a confirmed Scene 42 gap.
+# Sensor indices are local to each lens, even though the GS table shares them.
+PHOTO_SCENE42_READOUTS = {
+    MAIN: (1, 2, 3, 5, 8, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19),
+    'com.qti.tuned.aurora_semco_imx858_ultra.bin': (2, 3, 6, 7),
+    TELE3: (2, 3),
+    TELE5: (2, 4, 5, 16, 17),
+}
+PHOTO_SCENE42_EFFECTS = {0: 93, 28: 94}
+PHOTO_SCENE42_ROUTES = tuple(
+    (sensor, 42, source, effect)
+    for sensor in sorted(set().union(*PHOTO_SCENE42_READOUTS.values()))
+    for source, effect in PHOTO_SCENE42_EFFECTS.items()
+)
 NIGHT_PREVIEW_PROFILES = ((37, 0), (7, 0), (37, 80))
 NIGHT_PREVIEW_EFFECTS = {0: 89, 28: 90}
 NIGHT_PREVIEW_SENSORS = SCENE42_SENSORS
@@ -78,6 +92,16 @@ CROP_SCENE32_PROFILES = ((22, 0), (7, 0), (22, 80), (36, 80))
 CROP_SCENE32_EFFECT = 91
 CROP_PREVIEW_EFFECTS = {0: CROP_SCENE32_EFFECT, 28: 92}
 CROP_PREVIEW_SENSORS = {**SCENE42_SENSORS, MAIN: (4, 5, 6, 7)}
+# Normal Photo readouts with an existing Scene 0 Natural reference. Sensor
+# indices are local to each lens. GS selects from their union.
+CROP_PHOTO_READOUTS = {
+    MAIN: tuple(range(1, 20)),
+    'com.qti.tuned.aurora_semco_imx858_ultra.bin': (1, 2, 3, 6, 7),
+    TELE3: (1, 2, 3),
+    TELE5: (1, 2, 3, 4, 5, 16, 17),
+}
+CROP_PHOTO_SENSORS = sorted(set().union(*CROP_PHOTO_READOUTS.values()))
+CROP_PHOTO_EFFECTS = {0: 95, 28: 96}
 # The observed scene values also cover requests that inherit a parent node.
 OBSERVED_PREVIEW_SCENES = (4, 10, 42, 45)
 
@@ -320,6 +344,37 @@ def continuity_bindings(current, filename):
     return additions
 
 
+def photo_scene42_bindings(current, filename):
+    """Preserve Scene 42's effective bindings and fill verified appearance gaps."""
+    old_effects = {}
+    for sensor, scene, source, effect in photo_sky_routes(
+            scene4=True, extra=(*SCENE42_EXTRA_ROUTES, *CONTINUITY_ROUTES)):
+        old_effects.setdefault((sensor, scene, source), effect)
+
+    additions = {}
+    names = sorted({name for _, name in current.modules})
+    for sensor, scene, source, effect in PHOTO_SCENE42_ROUTES:
+        prior = old_effects.get((sensor, scene, source), source)
+        for feature1, feature2 in SKY_PROFILES:
+            prefix = (0, sensor, 0, feature1, feature2)
+            target = (*prefix, scene, effect)
+            changes = []
+            for name in names:
+                record = current.get_record(name, (*prefix, scene, prior))
+                if name in APPEARANCE and sensor in PHOTO_SCENE42_READOUTS[filename]:
+                    original = current.get_record(name, (*prefix, scene, source))
+                    neutral = current.get_record(name, (*prefix, 0, source))
+                    natural = current.get_record(name, (*prefix, 0, IPE_EFFECTS[source]))
+                    if (binding(record) == binding(original) == binding(neutral)
+                            and binding(natural) != binding(neutral)):
+                        record = natural
+                if selection(record) != selection(current.get_record(name, target)):
+                    changes.append((record, record[5]))
+            if changes:
+                additions[target] = changes
+    return additions
+
+
 def night_preview_scenes(lookup):
     return sorted(set(OBSERVED_PREVIEW_SCENES) | {
         value >> 16
@@ -406,7 +461,59 @@ def crop_preview_bindings(current, filename, scenes):
     return additions
 
 
-def tuned_payload(blob, filename, *, bind=preview_bindings):
+def crop_photo_bindings(current, filename, data, stock_blob, scenes):
+    """Repair cropped preview only where the stock scene inherits its neutral look."""
+    symbols, stock_data, tree = model.sections(stock_blob)
+    stock = model.LookupModel(list(model.MODE.iter_unpack(tree)), list(model.REC.iter_unpack(symbols)))
+    names = sorted({name for _, name in current.modules})
+    legacy_sensors = set().union(*CROP_PREVIEW_SENSORS.values())
+    photo_readouts = CROP_PHOTO_READOUTS[filename]
+
+    def content(blob, record):
+        return blob[record[3]:record[3] + record[4]] if record is not None else None
+
+    additions = {}
+    for sensor in CROP_PHOTO_SENSORS:
+        for f1, f2 in CROP_SCENE32_PROFILES:
+            prefix = (0, sensor, 0, f1, f2)
+            for source, effect in CROP_PHOTO_EFFECTS.items():
+                natural = IPE_EFFECTS[source]
+                stock_neutral = (*prefix, 0, source)
+                reference_query = (*prefix, 0, natural)
+                references = {}
+                if sensor in photo_readouts:
+                    for name in APPEARANCE:
+                        neutral = content(stock_data, stock.get_record(name, stock_neutral))
+                        reference = current.get_record(name, reference_query)
+                        if neutral is not None and reference is not None and content(data, reference) != neutral:
+                            references[name] = (neutral, reference)
+
+                for scene in scenes:
+                    # The older GS already sends Scene 40/46 to public Natural
+                    # when the sensor misses the private crop route.
+                    prior = source
+                    if sensor in legacy_sensors:
+                        prior = CROP_PREVIEW_EFFECTS[source]
+                    elif scene in (40, 46):
+                        prior = natural
+                    effective = (*prefix, scene, prior)
+                    original = (*prefix, scene, source)
+                    target = (*prefix, scene, effect)
+                    changes = []
+                    for name in names:
+                        record = current.get_record(name, effective)
+                        if name in references:
+                            neutral, reference = references[name]
+                            if content(data, record) == neutral == content(stock_data, stock.get_record(name, original)):
+                                record = reference
+                        if selection(record) != selection(current.get_record(name, target)):
+                            changes.append((record, record[5]))
+                    if changes:
+                        additions[target] = changes
+    return additions
+
+
+def tuned_payload(blob, filename, *, bind=preview_bindings, share_new_effects=False):
     symbols, data, tree = model.sections(blob)
     records = list(model.REC.iter_unpack(symbols))
     modes = list(model.MODE.iter_unpack(tree))
@@ -423,8 +530,18 @@ def tuned_payload(blob, filename, *, bind=preview_bindings):
             canonical.setdefault(binding(record), record[0])
     for target in additions:
         current.ensure_path(target, modes, records, privatize=True)
+    shared = {}
     for target, changes in additions.items():
         node = current.ensure_path(target, modes, records)
+        if share_new_effects:
+            # Stock Chromatix can link identical Effect leaves across parents.
+            # Keep the parent-specific inheritance and write each set of local
+            # overrides once. Callers use this only for previously unused Effects.
+            key = (target[-1], tuple(sorted((binding(row), sid) for row, sid in changes)))
+            owner = shared.setdefault(key, node)
+            if owner != node:
+                modes[node] = (*modes[node][:4], owner)
+                continue
         for record, source_sid in changes:
             sid = len(records) + 1
             if source_sid is None:
@@ -443,6 +560,14 @@ def tuned_payload(blob, filename, *, bind=preview_bindings):
     return body + struct.pack('<I', zlib.crc32(body))
 
 
+def photo_sky_routes(*, scene4=False, extra=()):
+    routes = tuple((sensor, scene, source, private)
+                   for sensor in sorted(SKY_SENSORS.values())
+                   for scene, source, private in SKY_EFFECTS
+                   if not (scene4 and scene == 4 and sensor != SKY_SENSORS[MAIN]))
+    return (*routes, *extra)
+
+
 def gs_payload(blob, *, build=BUILD, sky_scenes=False, photo_scenes=False, scene4=False,
                extra_sky_routes=(), night_scenes=(), crop_scene32=False, crop_scenes=()):
     image = ELFFile(io.BytesIO(blob))
@@ -456,13 +581,10 @@ def gs_payload(blob, *, build=BUILD, sky_scenes=False, photo_scenes=False, scene
                 for sensor, feature1, scene in GS_ROUTES) + '    .byte 255\n', encoding='utf-8')
     flags = []
     if sky_scenes:
-        routes = [(sensor, scene, source, private)
-                  for sensor in sorted(SKY_SENSORS.values())
-                  for scene, source, private in SKY_EFFECTS
-                  if not (scene4 and scene == 4 and sensor != SKY_SENSORS[MAIN])]
+        routes = photo_sky_routes(scene4=scene4, extra=extra_sky_routes)
         (build / 'sky_preview_routes.inc').write_text(
             ''.join(f'    .byte {sensor}, {scene}, {source}, {private}\n'
-                    for sensor, scene, source, private in (*routes, *extra_sky_routes))
+                    for sensor, scene, source, private in routes)
             + '    .byte 255\n', encoding='utf-8')
         flags.append('-DSKY_PREVIEW')
     if photo_scenes:

@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.regex.*;
+import org.json.JSONObject;
 import de.robv.android.xposed.*;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
@@ -116,15 +117,23 @@ public final class WatermarkModule {
             Path root=context.getFilesDir().toPath().toRealPath();
             Path actual=source.toRealPath();
             if (!actual.startsWith(root) || !actual.toString().contains("watermark")) { log("SKIP source outside watermark files"); return; }
-            original=Files.readAllBytes(actual);
+            byte[] templateBytes=Files.readAllBytes(actual);
+            JSONObject template=new JSONObject(new String(templateBytes,StandardCharsets.UTF_8));
+            template.getJSONObject("wmRes");
+            Path relativeTemplate=root.relativize(actual);
+            if (!WatermarkTemplate.hasConvertibleModel(template)) {
+                log("SKIP_TEMPLATE no convertible model node template="+relativeTemplate);
+                return;
+            }
+            original=templateBytes;
             Path folder=actual.getParent();
-            log("TRANSFORM_BEGIN name="+name+" template="+actual.getFileName());
+            log("TRANSFORM_BEGIN name="+name+" template="+relativeTemplate);
             supplySuffixAssets(host.moduleApkPath,folder);
             boolean changed=(Boolean)Class.forName("com.aurora.camera.features.watermark.WatermarkAssetRouter")
                 .getMethod("postProcessMivi",Context.class,Path.class,Path.class).invoke(null,context,actual,folder);
             if(!changed) throw new IllegalStateException("router did not transform any model nodes");
             String json=new String(Files.readAllBytes(actual),StandardCharsets.UTF_8);
-            new org.json.JSONObject(json);
+            new JSONObject(json);
             Set<String> assets=new LinkedHashSet<>(); Matcher m=ASSET.matcher(json); while(m.find()) assets.add(m.group());
             if(assets.isEmpty()) throw new IllegalStateException("no generated assets referenced");
             publishing.set(true);

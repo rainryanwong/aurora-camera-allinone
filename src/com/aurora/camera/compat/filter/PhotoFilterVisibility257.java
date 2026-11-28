@@ -48,8 +48,8 @@ public final class PhotoFilterVisibility257 {
         Scope(Object panel,boolean thumbnail){this.panel=panel;this.thumbnail=thumbnail;}
     }
     private static final class Source {
-        final Object component;final ArrayList<Object> full;
-        Source(Object component,List<?> full){this.component=component;this.full=new ArrayList<>(full);}
+        final WeakReference<Object> component;final ArrayList<Object> full;
+        Source(Object component,List<?> full){this.component=new WeakReference<>(component);this.full=new ArrayList<>(full);}
     }
     public PhotoFilterVisibility257(Host host,LutRuntime229 runtime)throws ReflectiveOperationException {
         workspace=new FilterWorkspace215(host,runtime);photo=host.type("com.android.camera.fragment.j0");filter=host.type("r2.t");
@@ -71,7 +71,14 @@ public final class PhotoFilterVisibility257 {
             if(java.util.Arrays.asList("C","f","Q","G").contains(method.getName()))maintenance.add(method);
         original=String.valueOf(host.field("i3.b","P").getInt(null));
     }
-    private boolean eligible(Object panel){return photo.isInstance(panel)&&(Integer)read(mode,panel)==163&&filter.isInstance(read(component,panel));}
+    private static final int AI_PHOTO = 168;
+    private static final String REAR_ORDER = "MiCamStyleRear";
+
+    private boolean eligible(Object panel) {
+        if (!photo.isInstance(panel) || !filter.isInstance(read(component, panel))) return false;
+        int current = (Integer) read(mode, panel);
+        return current == 163 || (current == AI_PHOTO && !workspace.frontFacing());
+    }
     private void remember(Object panel){
         synchronized(panels){for(Iterator<WeakReference<Object>> it=panels.iterator();it.hasNext();){Object old=it.next().get();if(old==null)it.remove();else if(old==panel)return;}panels.add(new WeakReference<>(panel));}
     }
@@ -79,8 +86,36 @@ public final class PhotoFilterVisibility257 {
         if(!eligible(panel))return;remember(panel);Object owner=read(component,panel),visible=read(rows,panel);
         if(visible!=null)XposedHelpers.setAdditionalInstanceField(visible,SOURCE,new Source(owner,(List<?>)read(items,owner)));
     }
-    @SuppressWarnings("unchecked") private ArrayList<Object> project(Object owner)throws IOException {
+    @SuppressWarnings("unchecked") private ArrayList<Object> project(Object owner, Object panel)throws IOException {
         CamStyleAccess260.lock();try{
+        if ((Integer) read(mode, panel) == AI_PHOTO) {
+            List<Object> master = (List<Object>) read(items, owner);
+            long revision = WorkspaceFilterOrder270.revision();
+            Projection cached = projections.get(owner);
+            if (cached != null && cached.master == master && REAR_ORDER.equals(cached.workspace)
+                    && cached.revision == revision) return cached.copy();
+            Map<String, Integer> ranks = new HashMap<>();
+            for (WorkspaceFilterOrder270.Row row : WorkspaceFilterOrder270.cached(
+                    (Context) call(workspace.global, null), REAR_ORDER)) {
+                if (row.official) ranks.put(String.valueOf(row.filter), row.order);
+            }
+            ArrayList<Object> ordered = new ArrayList<>(master.size());
+            boolean originalAdded = false;
+            for (Object item : master) {
+                if (original.equals(read(value, item))) {
+                    if (originalAdded) continue;
+                    originalAdded = true;
+                }
+                ordered.add(item);
+            }
+            ordered.sort(Comparator.comparingInt(item -> {
+                String id = (String) read(value, item);
+                return original.equals(id) ? Integer.MIN_VALUE : ranks.getOrDefault(id, Integer.MAX_VALUE);
+            }));
+            Projection projection = new Projection(owner, master, ordered, REAR_ORDER, revision);
+            projections.put(owner, projection);
+            return projection.copy();
+        }
         Object current;
         full.set(full.get()+1);
         try{current=workspace.workspace(workspace.frontFacing());}
@@ -111,7 +146,7 @@ public final class PhotoFilterVisibility257 {
         if(!eligible(panel)||read(adapter,panel)==null||read(list,panel)==null)return;
         Object owner=read(component,panel);List<?> previous=(List<?>)read(rows,panel);int old=(Integer)read(selected,panel);
         boolean recipe=old>=0&&old<previous.size()&&XposedHelpers.getAdditionalInstanceField(previous.get(old),RECIPE)!=null;
-        String active=(String)call(currentValue,panel);ArrayList<Object> visible=project(owner);
+        String active=(String)call(currentValue,panel);ArrayList<Object> visible=project(owner,panel);
         rows.set(panel,visible);adapterRows.set(read(adapter,panel),new ArrayList<>(visible));
         // This native binding also runs the existing recipe presenter, retaining
         // each user preset's own identity instead of treating its base as official.
@@ -120,10 +155,10 @@ public final class PhotoFilterVisibility257 {
         for(Object row:finalRows)if(active.equals(read(value,row))&&XposedHelpers.getAdditionalInstanceField(row,RECIPE)==null){retained=true;break;}
         // j0.et delegates to this configuration path. Its UI click gate is not
         // part of a management change, so apply the configuration directly.
-        if(!retained){call(closed,owner,163,false);call(configure,call(config,null),Integer.parseInt(original));}
+        if(!retained && (Integer)read(mode,panel)==163){call(closed,owner,163,false);call(configure,call(config,null),Integer.parseInt(original));}
         int position=(Integer)call(index,panel);selected.setInt(panel,position);((AtomicInteger)read(click,panel)).set(position);call(present,panel,position,call(currentValue,panel));
         listRows.set(read(list,panel),new ArrayList<>(finalRows));listIndex.setInt(read(list,panel),position);
-        adapterRows.set(read(adapter,panel),new ArrayList<>(finalRows));call(notifyAdapter,read(adapter,panel));capture(panel);
+        adapterRows.set(read(adapter,panel),new ArrayList<>(finalRows));call(notifyAdapter,read(adapter,panel));
     }
     /** Called by the shared workspace's existing main-thread change dispatch. */
     public static void changed(){
@@ -162,11 +197,11 @@ public final class PhotoFilterVisibility257 {
         });
         HookDiagnostics.hookMethod(getItems,new StrictHook(1000){@Override protected void after(MethodHookParam p)throws Throwable{
             Scope reader=scope.get();if(p.hasThrowable()||reader==null||full.get()>0||!eligible(reader.panel)||read(component,reader.panel)!=p.thisObject)return;
-            p.setResult(reader.thumbnail?read(rows,reader.panel):project(p.thisObject));
+            p.setResult(reader.thumbnail?read(rows,reader.panel):project(p.thisObject,reader.panel));
         }});
         HookDiagnostics.hookMethod(restoreItems,new StrictHook(1000){@Override protected void before(MethodHookParam p){
             Object source=XposedHelpers.getAdditionalInstanceField(p.args[1],SOURCE);
-            if(source instanceof Source&&((Source)source).component==p.thisObject)p.args[1]=new ArrayList<>(((Source)source).full);
+            if(source instanceof Source&&((Source)source).component.get()==p.thisObject)p.args[1]=new ArrayList<>(((Source)source).full);
         }});
         StrictHook refresh=new StrictHook(1000){@Override protected void after(MethodHookParam p)throws Throwable{if(!p.hasThrowable())synchronize(p.thisObject);}};
         HookDiagnostics.hookMethod(initialize,refresh);HookDiagnostics.hookMethod(resume,refresh);

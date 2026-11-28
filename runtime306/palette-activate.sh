@@ -4,23 +4,26 @@ MODDIR=${0%/*}
 exec >>"$MODDIR/activation.log" 2>&1
 echo "activate $(date)"
 fail() { echo "FAILED: $*"; exit 1; }
-# mksh has a tracked-alias builtin named hash; never use that function name.
-file_sha() { /system/bin/sha256sum "$1" 2>/dev/null | /system/bin/cut -d ' ' -f 1; }
 TARGET=/odm/lib64/camera/plugins/com.xiaomi.plugin.filter.so
-STOCK_BODY=ace431468fdfcc9d7a15d75e9f8ec8d195d28a013fd1e1e4d1a5d520bccd233f
-EXPECTED=24828f68a2bb934b10357ac0af82e28f3b86ca420822697c2b0490e3d0e3aab2
+SOURCE="$MODDIR/payload/com.xiaomi.plugin.filter.so"
 [ ! -e "$MODDIR/disable" ] && [ ! -e "$MODDIR/remove" ] || exit 0
-[ "$(file_sha "$MODDIR/payload/com.xiaomi.plugin.filter.so")" = "$EXPECTED" ] || fail "candidate photo plugin checksum mismatch"
 . "$MODDIR/root-compat.sh" || fail "root compatibility helper missing"
 root_init || fail "root manager tools unavailable"
-root_require_applets mount umount mountpoint awk readlink || fail "required palette tools unavailable"
+root_require_applets mount umount mountpoint awk cmp || fail "required palette tools unavailable"
 root_log_context
 "$MODDIR/bin/odm-compat" filter-factory /odm/lib64/libMiPhotoFilter.so ||
   fail "stock filter factory unavailable"
-CURRENT=$(file_sha "$TARGET")
-if [ "$CURRENT" != "$EXPECTED" ]; then
-  [ "$(elf_body_sha "$TARGET" 776 16)" = "$STOCK_BODY" ] || fail "incompatible original plugin: $TARGET"
-fi
+BASE=/dev/aurora_palette_vendor_base
+base_id=
+overlay_id=
+plugin_id=
+rollback_palette() {
+  root_unmount_owned "$TARGET" "$plugin_id" "$TARGET" || echo 'ROLLBACK FAILED: Palette plugin'
+  root_unmount_owned /vendor/lib64 "$overlay_id" /vendor/lib64 || echo 'ROLLBACK FAILED: Palette vendor overlay'
+  root_unmount_owned "$BASE" "$base_id" "$BASE" || echo 'ROLLBACK FAILED: Palette lower view'
+}
+trap rollback_palette EXIT
+trap 'exit 1' HUP INT TERM
 # Prefer the manager-mounted system/vendor files on all three managers.
 # When neither is present, retain the accepted read-only lowerdir merge.
 # Never hide existing vendor child mounts or a partial/foreign library set.
@@ -43,36 +46,41 @@ else
   chmod 0755 /dev/aurora_palette_stage "$STAGE"
   for name in libAuroraBridge.so libAuroraCandy.so; do
     cp "$MODDIR/system/vendor/lib64/$name" "$STAGE/$name" || fail "stage $name"
-    chmod 0644 "$STAGE/$name"
-    [ "$(file_sha "$STAGE/$name")" = "$(file_sha "$MODDIR/system/vendor/lib64/$name")" ] || fail "staging hash mismatch"
+    chmod 0644 "$STAGE/$name" || fail "stage permissions: $name"
   done
   COUNT=$(find "$STAGE" -mindepth 1 -maxdepth 1 | wc -l)
   [ "$COUNT" -eq 2 ] || fail "unexpected staging membership"
   chcon -R u:object_r:vendor_file:s0 /dev/aurora_palette_stage || fail "label vendor stage"
-  BASE=/dev/aurora_palette_vendor_base
   mkdir -p "$BASE" || fail "make lower view"
   if ! "$BB" mountpoint -q "$BASE"; then
     "$BB" mount -o bind /vendor/lib64 "$BASE" || fail "preserve vendor lower view"
+    base_id=$(root_mount_id "$BASE")
   fi
   # Do not let the destination overlay propagate back onto its lower view.
   "$BB" mount --make-private "$BASE" || fail "isolate vendor lower view"
-  "$BB" mount -t overlay -o "ro,lowerdir=$STAGE:$BASE" "$ROOT_MOUNT_SOURCE" /vendor/lib64 || {
-    "$BB" umount "$BASE"
+  "$BB" mount -t overlay -o "ro,lowerdir=$STAGE:$BASE" "$ROOT_MOUNT_SOURCE" /vendor/lib64 ||
     fail "readonly vendor file merge unavailable"
-  }
+  overlay_id=$(root_mount_id /vendor/lib64)
   echo "Read-only vendor merge added the two palette libraries"
 fi
 for name in libAuroraBridge.so libAuroraCandy.so; do
   localfile=$MODDIR/system/vendor/lib64/$name
   [ -s "$localfile" ] && [ -f "/vendor/lib64/$name" ] || fail "vendor module mount missing: $name"
-  [ "$(file_sha "$localfile")" = "$(file_sha "/vendor/lib64/$name")" ] || fail "vendor library mismatch: $name"
+  if [ -z "$overlay_id" ] && ! root_same_file "$localfile" "/vendor/lib64/$name"; then
+    "$BB" cmp -s "$localfile" "/vendor/lib64/$name" || fail "vendor library mismatch: $name"
+  fi
 done
-[ "$CURRENT" != "$EXPECTED" ] || { echo "Already activated"; exit 0; }
-chcon u:object_r:vendor_file:s0 "$MODDIR/payload/com.xiaomi.plugin.filter.so" || fail "label plugin"
-"$BB" mount -o bind "$MODDIR/payload/com.xiaomi.plugin.filter.so" "$TARGET" || fail "bind photo plugin"
-if [ "$(file_sha "$TARGET")" != "$EXPECTED" ]; then
-  "$BB" umount "$TARGET"
-  fail "bind hash mismatch; unmounted"
+if ! root_same_file "$SOURCE" "$TARGET"; then
+  # The M3 directory merge already bind-mounts its lower photo plugin.
+  if [ -n "$(root_mount_id "$TARGET")" ] &&
+      ! root_same_file "/dev/phoenix_m3/plugins/${TARGET##*/}" "$TARGET"; then
+    fail 'photo plugin is already mounted by another source'
+  fi
+  chcon u:object_r:vendor_file:s0 "$SOURCE" || fail "label plugin"
+  "$BB" mount -o bind "$SOURCE" "$TARGET" || fail "bind photo plugin"
+  plugin_id=$(root_mount_id "$TARGET")
+  root_same_file "$SOURCE" "$TARGET" || fail "bind identity mismatch"
 fi
+trap - EXIT HUP INT TERM
 echo "Photo plugin file activated. Existing provider mappings may still be old."
 echo "No process was stopped. Inspect provider maps and AuroraPalette logs before acceptance."

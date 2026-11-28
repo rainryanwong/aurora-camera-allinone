@@ -86,6 +86,8 @@ public final class Classic239Hooks {
             private final ThreadLocal<String> captureModel=new ThreadLocal<>();
             private final Set<String> publishedStreetLuts=new HashSet<>();
             private final Set<String> diagnostics=Collections.synchronizedSet(new HashSet<>());
+            private final Map<String,String> lutDigests=new java.util.concurrent.ConcurrentHashMap<>();
+            private volatile SharedPreferences preferences;
             private String lastAsd;
             private final java.util.concurrent.atomic.AtomicLong previewRevision=new java.util.concurrent.atomic.AtomicLong();
             private volatile long appliedPreviewRevision;
@@ -94,7 +96,11 @@ public final class Classic239Hooks {
             Class<?> type(String name){try{return h.type(name);}catch(ClassNotFoundException failure){throw new IllegalStateException(failure);}}
             Object call(Object target,String name,Object...args){return XposedHelpers.callMethod(target,name,args);}
             Context context(){return(Context)XposedHelpers.callStaticMethod(type("com.xiaomi.camera.basic.Global"),"getContext");}
-            SharedPreferences prefs(){return context().getSharedPreferences(PREFS,0);}
+            SharedPreferences prefs(){
+                SharedPreferences current=preferences;
+                if(current==null){current=context().getSharedPreferences(PREFS,0);preferences=current;}
+                return current;
+            }
             String model(){return ClassicCatalog239.savedModel(prefs().getString(MODEL,"native"));}
             void diagnostic(String event,String value){if(diagnostics.add(event+" "+value))Log.i("AuroraClassic241",event+" "+value);}
             synchronized void asdDiagnostic(String state,Throwable failure){
@@ -102,7 +108,7 @@ public final class Classic239Hooks {
                 if(failure==null)Log.i("AuroraASD241","request_written "+state);else Log.e("AuroraASD241",state,failure);
             }
             String sha256(byte[] bytes){
-                try{byte[] hash=java.security.MessageDigest.getInstance("SHA-256").digest(bytes);StringBuilder out=new StringBuilder(64);for(byte value:hash)out.append(String.format(java.util.Locale.ROOT,"%02x",value&255));return out.toString();}
+                try{byte[] hash=java.security.MessageDigest.getInstance("SHA-256").digest(bytes);StringBuilder out=new StringBuilder(64);for(byte value:hash){out.append(Character.forDigit((value>>>4)&15,16));out.append(Character.forDigit(value&15,16));}return out.toString();}
                 catch(java.security.NoSuchAlgorithmException impossible){throw new AssertionError(impossible);}
             }
             int mode(){Object global=XposedHelpers.callStaticMethod(type("g2.a"),"g");return(Integer)call(global,"D",XposedHelpers.getObjectField(global,"u"));}
@@ -225,11 +231,14 @@ public final class Classic239Hooks {
                 }
             }
             byte[] lutBytes(String selected,String scene)throws IOException{return asset(selected,scene);}
+            String lutDigest(String selected,String scene,byte[] bytes){
+                return lutDigests.computeIfAbsent(selected+"/"+scene,key->sha256(bytes));
+            }
             Bitmap decode(String selected,String scene,String token)throws Throwable{
                 byte[] bytes=lutBytes(selected,scene);Bitmap result=BitmapFactory.decodeByteArray(bytes,0,bytes.length);
                 if(result==null||result.getWidth()!=512||result.getHeight()!=512){if(result!=null)result.recycle();throw new IOException("Invalid classic LUT "+selected+"/"+scene);}
                 diagnostic(captureModel.get()==null?"preview_decode":"capture_bitmap_decode",
-                        "model="+selected+" token="+token+" scene="+scene+" size=512x512 sha256="+sha256(bytes));return result;
+                        "model="+selected+" token="+token+" scene="+scene+" size=512x512 sha256="+lutDigest(selected,scene,bytes));return result;
             }
             JSONObject streetRequestParams(JSONObject params,int mask,String selected)throws Exception{
                 if((mask&CV_RENDER_BIT)==0)return params;
@@ -239,12 +248,16 @@ public final class Classic239Hooks {
                 String token=names.getString(index),scene=ClassicCatalog239.scene(token);
                 if(scene==null)return params;
                 String directory=params.getString("lutPath");
-                byte[] bytes=lutBytes(selected,scene);
-                // MIVI consumes a filename, not the camera process's LUT cache entry.
-                String alias="lut_cvstyle_aurora_"+sha256(bytes).substring(0,24);
+                String alias;
                 synchronized(publishedStreetLuts){
+                    byte[] bytes=null;
+                    String digest=lutDigests.get(selected+"/"+scene);
+                    if(digest==null){bytes=lutBytes(selected,scene);digest=lutDigest(selected,scene,bytes);}
+                    // MIVI consumes a filename, not the camera process's LUT cache entry.
+                    alias="lut_cvstyle_aurora_"+digest.substring(0,24);
                     String key=directory+alias;
                     if(!publishedStreetLuts.contains(key)){
+                        if(bytes==null)bytes=lutBytes(selected,scene);
                         if(!(Boolean)write.invoke(null,directory,alias+".png",bytes))
                             throw new IOException("Street CV LUT write rejected: "+directory+alias);
                         publishedStreetLuts.add(key);
@@ -313,7 +326,7 @@ public final class Classic239Hooks {
                         call(XposedHelpers.callStaticMethod(type("com.xiaomi.camera.mivi.filter.MIVILutCache"),"getInstance"),"removeLutName",token);
                         throw new IOException("Native MIVI classic LUT publication rejected "+token);
                     }
-                    diagnostic("mivi_publish","model="+selected+" token="+token+" directory="+p.args[2]+" file="+p.args[3]+" bytes="+bytes.length+" sha256="+sha256(bytes)+" accepted=true");
+                    diagnostic("mivi_publish","model="+selected+" token="+token+" directory="+p.args[2]+" file="+p.args[3]+" bytes="+bytes.length+" sha256="+lutDigest(selected,scene,bytes)+" accepted=true");
                     p.setResult(null);
                 }});
                 // RenderEngineV2's Tu.c inherits a token/Bitmap/CandySDK cache
@@ -330,9 +343,8 @@ public final class Classic239Hooks {
                     Object attribute=rendererAttribute.get(p.thisObject);if(attribute==null)return;
                     String token=(String)attributeToken.get(attribute);if(ClassicCatalog239.scene(token)==null)return;
                     String selected=model();Object previous=preview.cachedModel(p.thisObject);
-                    if(preview.prepareModel(p.thisObject,selected)){
-                        Log.i("AuroraClassic241","renderer_cache_invalidated previous="+previous+" model="+selected+" token="+token+" thread="+Thread.currentThread().getName());
-                    }
+                    if(!preview.prepareModel(p.thisObject,selected))return;
+                    Log.i("AuroraClassic241","renderer_cache_invalidated previous="+previous+" model="+selected+" token="+token+" thread="+Thread.currentThread().getName());
                     p.setObjectExtra("classic241.drawModel",selected);
                     diagnostic("renderer_active","model="+selected+" renderer="+p.thisObject.getClass().getName()+" token="+token);
                 }
@@ -387,6 +399,7 @@ public final class Classic239Hooks {
                 HookDiagnostics.hookMethod(draw,new StrictHook(){@Override protected void before(MethodHookParam p){
                     if(ClassicCatalog239.scene((String)XposedHelpers.getObjectField(p.thisObject,"j"))==null)return;
                     String selected=model();Object previous=XposedHelpers.getAdditionalInstanceField(p.thisObject,"aurora.classic239.model");
+                    if(selected.equals(previous))return;
                     int texture=(Integer)XposedHelpers.getObjectField(p.thisObject,"p");
                     // Native c() reloads a nonnegative texture after glIsTexture becomes false.
                     if(previous!=null&&!selected.equals(previous)&&texture>=0)XposedHelpers.callStaticMethod(type("com.xiaomi.gl.MIGL"),"glDeleteTexture",texture,"ClassicStyle239");

@@ -12,12 +12,17 @@ property=debug.aurora.preview_session
 package=com.aurora.camera.compat
 endpoint=content://$package.preview
 frame_file=/data/user/0/com.android.camera/cache/aurora-preview.frames
+control_file=/data/user/0/com.android.camera/cache/aurora-preview.control
 marker_file=/data/user/0/$package/cache/aurora-preview.marker
 mkdir -p "$state"
 
 phase() {
     printf '%s\n' "$1" > "$state/status.tmp"
     mv "$state/status.tmp" "$state/status"
+}
+
+set_session() {
+    setprop "$property" "$1" && touch "$control_file"
 }
 
 uptime_seconds() {
@@ -76,8 +81,11 @@ setup_native() {
 }
 
 collect() {
+    session_active=0
     cleanup() {
-        setprop "$property" ''
+        if [ "$session_active" = 1 ]; then
+            set_session '' || printf '无法通知相机停止逐帧采集\n' >&2
+        fi
         case "$(cat "$state/status")" in
             starting|recording|marked) phase capture-error ;;
         esac
@@ -116,7 +124,8 @@ collect() {
         *) phase capture-error; exit 1 ;;
     esac
     deadline=$(( $(uptime_seconds) + 600 ))
-    setprop "$property" "file:$token:$deadline"
+    session_active=1
+    set_session "file:$token:$deadline"
     phase recording
     interrupted=0
     trap 'interrupted=1' HUP INT TERM
@@ -139,7 +148,8 @@ collect() {
         sleep 1
     done
     if [ "$interrupted" = 1 ]; then finish=interrupted; fi
-    setprop "$property" ''
+    set_session ''
+    session_active=0
     printf '0\n' > "$instance/tracing_on"
     printf '0\n' > "$instance/events/$group/enable"
     if [ -n "$mark_ns" ]; then

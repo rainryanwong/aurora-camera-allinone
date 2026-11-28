@@ -15,6 +15,14 @@ public final class PhotoQualityHooks {
         final Class<?> preference = host.type("com.android.camera.fragment.settings.h");
         final Method factory = host.method("com.android.camera.fragment.settings.g", "b", String.class);
         final Method context = host.method("com.xiaomi.camera.basic.Global", "getContext");
+        final Method encodingQuality = host.method("com.android.camera.data.data.i", "t");
+        final Method repository = host.method("g2.a", "a");
+        final Method readString = host.method("Xh.a", "m", String.class, String.class);
+        Class<?> quality = host.type("E1.F3");
+        if (encodingQuality.getReturnType() != quality || !quality.isEnum())
+            throw new NoSuchMethodException("Unexpected photo quality result");
+        @SuppressWarnings({"unchecked","rawtypes"})
+        final Object superQuality = Enum.valueOf((Class) quality, "SUPER");
         final Field key = host.field(preference, "a");
         final Field entries = host.field(preference, "b");
         final Field values = host.field(preference, "c");
@@ -35,6 +43,14 @@ public final class PhotoQualityHooks {
         return new HookPlan() {
             public String id() { return "F10.photo-quality-super"; }
             public void install() {
+                HookDiagnostics.hookMethod(encodingQuality, new StrictHook() {
+                    @Override protected void after(MethodHookParam p) throws Throwable {
+                        if (p.hasThrowable() || !(p.getResult() instanceof Enum)
+                                || !"HIGH".equals(((Enum<?>) p.getResult()).name())) return;
+                        Object saved = readString.invoke(repository.invoke(null), "pref_camera_jpegquality_key", "");
+                        if ("super".equalsIgnoreCase((String) saved)) p.setResult(superQuality);
+                    }
+                });
                 HookDiagnostics.hookMethod(factory, new StrictHook() {
                     @Override protected void after(MethodHookParam p) throws Throwable {
                         if (p.hasThrowable() || !"pref_camera_jpegquality_key".equals(p.args[0])) return;

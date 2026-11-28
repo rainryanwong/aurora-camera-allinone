@@ -19,11 +19,16 @@ import java.util.function.Consumer;
 
 /** Phoenix three-way street UI selection, mapped to exact stock-1770 consumers. */
 public final class Street217Hooks {
+    // com.mi.device.Aurora.b1() in the 14 Ultra stock camera, used for the
+    // street depth-of-field formula when the HAL supplies a distance table.
+    private static final float[] AURORA_DEPTH_OF_FIELD = {0f, 12.28f, 1.4f};
     private static final String KEY="pref_aurora_street_ui217";
     private static final String HANDLEFIX_BRIDGE = "com.aurora.camera.compat.handlefix.streetUi.1770.v1";
     private static final String[] LABELS={"原生","经典街拍","传奇街拍"};
     private Street217Hooks(){}
     public static HookPlan resolve(Host h)throws ReflectiveOperationException {
+        final Method loadDepth = h.method("r2.b0", "o");
+        final Field depth = h.field("r2.b0", "c");
         final Method global=h.method("com.xiaomi.camera.basic.Global","getContext");
         final Method settings=h.method("com.android.camera.fragment.settings.CameraAdvancePreferenceFragment","addCurrentPreferences");
         final Method activity=h.method("androidx.fragment.app.Fragment","requireActivity");
@@ -64,6 +69,12 @@ public final class Street217Hooks {
             }
             public String id(){return "217.classic-and-legend-street-ui";}
             public void install(){
+                HookDiagnostics.hookMethod(loadDepth, new StrictHook() {
+                    @Override protected void after(MethodHookParam p) throws IllegalAccessException {
+                        if (!p.hasThrowable() && depth.get(p.thisObject) == null)
+                            depth.set(p.thisObject, AURORA_DEPTH_OF_FIELD);
+                    }
+                });
                 HookDiagnostics.hookMethod(settings,new StrictHook(){@Override protected void after(MethodHookParam p)throws Throwable{
                     if(p.hasThrowable())return;Object screen=group.get(p.thisObject);if(find.invoke(screen,KEY)!=null)return;Object category=find.invoke(screen,"category_advance_setting");
                     Activity owner=(Activity)activity.invoke(p.thisObject);Object row=preference.newInstance(owner,null);persistent.setBoolean(row,false);order.setInt(row,-250);key.invoke(row,KEY);title.invoke(row,"街拍模式UI");summary.invoke(row,LABELS[selection()]);

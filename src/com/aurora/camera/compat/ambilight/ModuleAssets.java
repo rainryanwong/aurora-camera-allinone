@@ -4,8 +4,6 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -14,49 +12,30 @@ public final class ModuleAssets {
     public static final String CONFIG_NAME = "qigsaw_5.0.0.0_2.0.json";
     public static final String SPLIT_MD5 = "189952ca0ebbc0027b77b6461027ddff";
     public static final long SPLIT_BYTES = 2912883L;
-    private static final String CONFIG_SHA =
-            "26e34d5dc8d0b1a3e812543f5d6c596945fc16e69dab551aed42949a62c3d60c";
-    private static final String SPLIT_SHA =
-            "86a4fa65da35abb22cfe98ce5bde721d4f8e853d20e0c47d680d56dce538b12d";
     private final String moduleApkPath;
-    private final byte[] config;
+    private byte[] config;
     private byte[] split;
 
-    private ModuleAssets(String moduleApkPath, byte[] config) {
+    public ModuleAssets(String moduleApkPath) {
         this.moduleApkPath = moduleApkPath;
-        this.config = config;
     }
 
-    public static ModuleAssets load(String moduleApkPath) {
-        if (moduleApkPath == null || moduleApkPath.length() == 0) {
-            throw new IllegalStateException("Ambilight requires the real Xposed module APK path");
-        }
-        try (ZipFile module = new ZipFile(moduleApkPath)) {
-            byte[] config = read(module, "assets/ambilight/" + CONFIG_NAME);
-            if (!CONFIG_SHA.equals(sha256(config))) {
-                throw new IllegalStateException("Ambilight module asset identity mismatch");
-            }
-            return new ModuleAssets(moduleApkPath, config);
-        } catch (IOException | NoSuchAlgorithmException failure) {
-            throw new IllegalStateException("Cannot load exact Ambilight module assets", failure);
-        }
+    public synchronized InputStream config() {
+        if (config == null) config = asset(CONFIG_NAME);
+        return new ByteArrayInputStream(config);
     }
-
-    public InputStream config() { return new ByteArrayInputStream(config); }
 
     public synchronized InputStream split() {
-        if (split == null) {
-            try (ZipFile module = new ZipFile(moduleApkPath)) {
-                byte[] data = read(module, "assets/ambilight/ambilight.zip");
-                if (!SPLIT_SHA.equals(sha256(data))) {
-                    throw new IllegalStateException("Ambilight module asset identity mismatch");
-                }
-                split = data;
-            } catch (IOException | NoSuchAlgorithmException failure) {
-                throw new IllegalStateException("Cannot load exact Ambilight module assets", failure);
-            }
-        }
+        if (split == null) split = asset("ambilight.zip");
         return new ByteArrayInputStream(split);
+    }
+
+    private byte[] asset(String name) {
+        try (ZipFile module = new ZipFile(moduleApkPath)) {
+            return read(module, "assets/ambilight/" + name);
+        } catch (IOException failure) {
+            throw new IllegalStateException("Cannot read Ambilight asset " + name, failure);
+        }
     }
 
     private static byte[] read(ZipFile module, String name) throws IOException {
@@ -69,16 +48,5 @@ public final class ModuleAssets {
             while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
             return output.toByteArray();
         }
-    }
-
-    private static String sha256(byte[] data) throws NoSuchAlgorithmException {
-        byte[] digest = MessageDigest.getInstance("SHA-256").digest(data);
-        StringBuilder result = new StringBuilder(digest.length * 2);
-        for (byte value : digest) {
-            int unsigned = value & 255;
-            result.append(Character.forDigit(unsigned >>> 4, 16));
-            result.append(Character.forDigit(unsigned & 15, 16));
-        }
-        return result.toString();
     }
 }

@@ -25,6 +25,7 @@ final class DirectorMenuLayout implements HookPlan {
     private static final int ASPECT_RATIO = 210;
     private static final int BLANK = 216;
     private static final int EXIT = 217;
+    private static final int WATERMARK = 223;
     private static final int SETTINGS = 224;
     private static final int PHOTO_CAPTURE_METHOD = 225;
     private static final int EXPOSURE_FEEDBACK = 258;
@@ -37,7 +38,8 @@ final class DirectorMenuLayout implements HookPlan {
     private final Class<?> directorUi;
     private final Class<?> editorType;
     private final Field itemId, itemGravity, itemPosition, itemMenuProvider;
-    private final Field rowId, rowIcon, rowTitle, menuIcon, menuTitle, fragmentMode, componentMode;
+    private final Field rowId, rowIcon, rowAnimation, rowTitle, menuIcon, menuAnimation, menuTitle, fragmentMode, componentMode;
+    private final int watermarkIcon;
     private final Field editorTop, editorMenu, editorBlanks, editorInitialRows, adapterItems, editorHolderView;
     private final Field deviceFeatures;
     private final Method nativeMenu, nativeTop, build, readMenuResource, dataGlobal, component;
@@ -47,8 +49,9 @@ final class DirectorMenuLayout implements HookPlan {
     private final Method allocateRow;
     private final Object allocator;
     private final Class<?> rowType;
-    private final DirectorReferenceLines referenceLines;
-    private final DirectorRecordingFormats recordingFormats;
+    private final Host host;
+    private DirectorReferenceLines referenceLines;
+    private DirectorRecordingFormats recordingFormats;
     private final Map<Object, Boolean> directorMenuAdapters = new WeakHashMap<>();
 
     static HookPlan prepare(Host host) throws ReflectiveOperationException {
@@ -73,6 +76,9 @@ final class DirectorMenuLayout implements HookPlan {
         itemMenuProvider = host.field(item, "h");
         rowId = host.field(rowType, "r");
         rowIcon = host.field(rowType, "c");
+        rowAnimation = host.field(rowType, "j");
+        menuAnimation = host.field("b5.a", "b");
+        watermarkIcon = host.field("Rh.b", "ic_watermark_top_cloud_config").getInt(null);
         rowTitle = host.field(rowType, "l");
         menuIcon = host.field("b5.a", "a");
         menuTitle = host.field("b5.a", "c");
@@ -105,8 +111,7 @@ final class DirectorMenuLayout implements HookPlan {
         collectEditor = host.method(editorFragment, "qs");
         notifyAdapter = host.method("androidx.recyclerview.widget.RecyclerView$g", "notifyDataSetChanged");
         bindEditorItem = host.method(adapter, "u", host.type("Y9.T"), String.class);
-        referenceLines = new DirectorReferenceLines(host);
-        recordingFormats = new DirectorRecordingFormats(host);
+        this.host = host;
     }
 
     @Override public String id() {
@@ -114,8 +119,6 @@ final class DirectorMenuLayout implements HookPlan {
     }
 
     @Override public void install() {
-        referenceLines.install();
-        recordingFormats.install();
         HookDiagnostics.hookMethod(editableIds, new LayoutHook() {
             @Override protected void after(MethodHookParam param) throws ReflectiveOperationException {
                 if (param.hasThrowable() || (int) param.args[0] != MODE) return;
@@ -244,6 +247,16 @@ final class DirectorMenuLayout implements HookPlan {
                 mark(param);
             }
         });
+        HookDiagnostics.tryInstall("DirectorReferenceLines", () -> {
+            DirectorReferenceLines lines = new DirectorReferenceLines(host);
+            lines.install();
+            if (HookDiagnostics.allHooksRegistered()) referenceLines = lines;
+        });
+        HookDiagnostics.tryInstall("DirectorRecordingFormats", () -> {
+            DirectorRecordingFormats formats = new DirectorRecordingFormats(host);
+            formats.install();
+            if (HookDiagnostics.allHooksRegistered()) recordingFormats = formats;
+        });
     }
 
     private Object modeUi(Object fragment) throws ReflectiveOperationException {
@@ -268,12 +281,18 @@ final class DirectorMenuLayout implements HookPlan {
             int id = itemId.getInt(item);
             if (!excluded(id) && !cards.containsKey(id)) cards.put(id, build.invoke(null, id));
         }
-        cards.put(DirectorReferenceLines.ITEM_ID, referenceLines.item());
+        if (referenceLines == null) cards.remove(DirectorReferenceLines.ITEM_ID);
+        if (recordingFormats == null) {
+            cards.remove(DirectorRecordingFormats.DOLBY_VISION);
+            cards.remove(DirectorRecordingFormats.MASTER_SHOT);
+        }
+        cards.put(WATERMARK, build.invoke(null, WATERMARK));
+        if (referenceLines != null) cards.put(DirectorReferenceLines.ITEM_ID, referenceLines.item());
         if ((boolean) supportsPeaking.invoke(deviceFeatures.get(device.invoke(null)))) {
             cards.put(FOCUS_PEAK, build.invoke(null, FOCUS_PEAK));
         }
         cards.put(EXPOSURE_FEEDBACK, build.invoke(null, EXPOSURE_FEEDBACK));
-        recordingFormats.addCards(cards);
+        if (recordingFormats != null) recordingFormats.addCards(cards);
         if (settings != null) cards.put(SETTINGS, settings);
         return cards;
     }
@@ -341,15 +360,21 @@ final class DirectorMenuLayout implements HookPlan {
     private Object editorRow(int id, Map<Integer, Object> rows, Object item)
             throws ReflectiveOperationException {
         Object row = rows.get(id);
-        if (row != null) return row;
-        row = allocateRow.invoke(allocator, rowType);
-        rowId.set(row, String.valueOf(id));
-        rowIcon.setInt(row, -1);
-        rowTitle.setInt(row, -1);
+        if (row != null && id != WATERMARK) return row;
+        if (row == null) {
+            row = allocateRow.invoke(allocator, rowType);
+            rowId.set(row, String.valueOf(id));
+            rowIcon.setInt(row, -1);
+            rowTitle.setInt(row, -1);
+        }
         if (item != null) {
             Object resource = readMenuResource.invoke(itemMenuProvider.get(item), MODE);
             rowIcon.setInt(row, id == DirectorRecordingFormats.DOLBY_VISION
                     ? DirectorRecordingFormats.DOLBY_EDITOR_ICON : menuIcon.getInt(resource));
+            if (id == WATERMARK) {
+                rowIcon.setInt(row, watermarkIcon);
+                rowAnimation.setInt(row, menuAnimation.getInt(resource));
+            }
             rowTitle.setInt(row, menuTitle.getInt(resource));
         }
         return row;

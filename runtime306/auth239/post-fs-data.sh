@@ -15,10 +15,15 @@ sh "$MODDIR/init-photo-formula.sh" || fail 'initialize photo formula'
 LIB="$MODDIR/payload/libMiPhotoFilter.so"
 TARGET=/odm/lib64/libMiPhotoFilter.so
 [ -f "$TARGET" ] || fail 'stock MiPhotoFilter is missing'
-STOCK_BODY=be77a4987e0e8fd9009d6ebd501658f2ee028b254adc98480a51726013dce790
-[ "$(elf_body_sha "$TARGET" 736 20)" = "$STOCK_BODY" ] || fail "incompatible original photo library: $TARGET"
-[ "$(sha256sum "$LIB" | cut -d ' ' -f 1)" = d88b9a4acb0af712f345ab8e2bdc5800bfb4010020dea3e7418dece04314ba41 ] || fail 'AUTH photo payload hash mismatch'
+if root_same_file "$LIB" "$TARGET"; then
+    echo 'AUTH photo library already mounted'
+    exit 0
+fi
 chcon "$(/system/bin/stat -c %C "$TARGET")" "$LIB" || fail 'label AUTH photo library'
 "$BB" mount -o bind "$LIB" "$TARGET" || fail 'mount AUTH photo library'
-"$BB" cmp "$LIB" "$TARGET" || fail 'verify AUTH photo mount'
+mount_id=$(root_mount_id "$TARGET")
+if ! root_same_file "$LIB" "$TARGET"; then
+    root_unmount_owned "$TARGET" "$mount_id" "$TARGET" || echo 'ROLLBACK FAILED: AUTH photo mount'
+    fail 'verify AUTH photo mount'
+fi
 echo 'AUTHVignette photo library mounted; formula service readiness is separate'

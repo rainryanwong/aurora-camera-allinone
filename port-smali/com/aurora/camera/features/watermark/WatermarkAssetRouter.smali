@@ -1769,51 +1769,12 @@
 
     if-eqz v12, :cond_b
 
-    const/4 v4, 0x0
+    invoke-static {v12}, Lcom/aurora/camera/features/watermark/WatermarkTemplate;->findLogoForModel(Lorg/json/JSONArray;)Lorg/json/JSONObject;
 
-    move-object v13, v4
-
-    move v4, v2
-
-    .line 100
-    :goto_2
-    invoke-virtual {v12}, Lorg/json/JSONArray;->length()I
-
-    move-result v5
+    move-result-object v13
 
     const-string v14, "id"
 
-    if-ge v4, v5, :cond_5
-
-    .line 101
-    invoke-virtual {v12, v4}, Lorg/json/JSONArray;->optJSONObject(I)Lorg/json/JSONObject;
-
-    move-result-object v5
-
-    if-eqz v5, :cond_4
-
-    .line 102
-    const-string v6, "logo"
-
-    invoke-virtual {v5, v14}, Lorg/json/JSONObject;->optString(Ljava/lang/String;)Ljava/lang/String;
-
-    move-result-object v7
-
-    invoke-virtual {v6, v7}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
-
-    move-result v6
-
-    if-eqz v6, :cond_4
-
-    move-object v13, v5
-
-    :cond_4
-    add-int/lit8 v4, v4, 0x1
-
-    goto :goto_2
-
-    .line 106
-    :cond_5
     new-instance v15, Lorg/json/JSONArray;
 
     invoke-direct {v15}, Lorg/json/JSONArray;-><init>()V

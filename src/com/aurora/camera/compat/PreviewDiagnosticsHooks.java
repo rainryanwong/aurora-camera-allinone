@@ -6,10 +6,11 @@ import android.hardware.camera2.CaptureResult;
 import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.ColorSpaceTransform;
 import android.hardware.camera2.params.RggbChannelVector;
+import android.os.FileObserver;
 import android.os.SystemClock;
-import android.util.Log;
 import com.aurora.camera.diagnostics.HookDiagnostics;
 import com.aurora.camera.diagnostics.ObservedHook;
+import de.robv.android.xposed.XC_MethodHook.Unhook;
 import de.robv.android.xposed.XC_MethodHook.MethodHookParam;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -23,15 +24,15 @@ import org.json.JSONObject;
 final class PreviewDiagnosticsHooks implements HookPlan {
     private static final String PROPERTY = "debug.aurora.preview_session";
     private static final String FILE_SESSION = "file:";
-    private static final String TAG = "AuroraPreviewFrame";
     private static final String RECORDED = "aurora.preview.recorded";
+    private static final String CONTROL = "aurora-preview.control";
+    private static FileObserver observer;
     private final Method completed;
     private final Method property;
     private final File frameFile;
     private FileOutputStream frames;
     private String fileSession;
-    private String fileToken;
-    private long fileDeadlineNanos;
+    private Unhook capture;
 
     private PreviewDiagnosticsHooks(Method completed, Method property, File frameFile) {
         this.completed = completed;
@@ -49,52 +50,71 @@ final class PreviewDiagnosticsHooks implements HookPlan {
     @Override public String id() { return "preview-diagnostics"; }
 
     @Override public void install() {
-        HookDiagnostics.hookMethod(completed, new ObservedHook() {
-            @Override protected synchronized void runAfter(MethodHookParam param) throws Exception {
-                if (param.hasThrowable()) return;
-                String session = (String) property.invoke(null, PROPERTY);
-                if (frames != null && !session.equals(fileSession)) closeFrames();
-                if (session.isEmpty()) return;
-                CaptureRequest request = (CaptureRequest) param.args[1];
-                if (!Integer.valueOf(CaptureRequest.CONTROL_CAPTURE_INTENT_PREVIEW)
-                        .equals(request.get(CaptureRequest.CONTROL_CAPTURE_INTENT))) return;
-                long now = SystemClock.elapsedRealtimeNanos();
-                boolean fileCapture = session.startsWith(FILE_SESSION);
-                if (fileCapture) {
-                    if (!session.equals(fileSession)) {
-                        int separator = session.lastIndexOf(':');
-                        fileToken = session.substring(FILE_SESSION.length(), separator);
-                        fileDeadlineNanos = Long.parseLong(session.substring(separator + 1)) * 1_000_000_000L;
-                        fileSession = session;
-                    }
-                    if (now >= fileDeadlineNanos) {
-                        if (frames != null) closeFrames();
-                        return;
-                    }
-                }
-                CameraCaptureSession camera = (CameraCaptureSession) param.args[0];
-                CaptureResult result = (CaptureResult) param.args[2];
-                String row = now + " " + frame(camera, result);
-                if (fileCapture) {
-                    if (frames == null) frames = new FileOutputStream(frameFile, true);
-                    frames.write((fileToken + " " + row + "\n").getBytes(StandardCharsets.UTF_8));
-                } else {
-                    // Earlier All in One versions collect the plain-token stream from logcat.
-                    Log.i(TAG, session + " " + row);
-                }
-                param.setObjectExtra(RECORDED, Boolean.TRUE);
+        HookDiagnostics.Operation control = HookDiagnostics.operation("cache/" + CONTROL);
+        observer = new FileObserver(frameFile.getParentFile(), FileObserver.CREATE | FileObserver.ATTRIB) {
+            @Override public void onEvent(int event, String path) {
+                if (CONTROL.equals(path)) sync(control);
             }
-
-            @Override protected boolean countsAsRun(MethodHookParam param) {
-                return Boolean.TRUE.equals(param.getObjectExtra(RECORDED));
-            }
-        });
+        };
+        observer.startWatching();
+        sync(control);
     }
 
-    private void closeFrames() throws IOException {
-        FileOutputStream stream = frames;
-        frames = null;
-        stream.close();
+    private synchronized void sync(HookDiagnostics.Operation control) {
+        try {
+            String session = (String) property.invoke(null, PROPERTY);
+            if (session.equals(fileSession)) return;
+            stop();
+            if (!session.startsWith(FILE_SESSION)) return;
+            int separator = session.lastIndexOf(':');
+            String token = session.substring(FILE_SESSION.length(), separator);
+            long deadline = Long.parseLong(session.substring(separator + 1)) * 1_000_000_000L;
+            if (SystemClock.elapsedRealtimeNanos() >= deadline) return;
+            capture = HookDiagnostics.hookMethod(completed, new ObservedHook() {
+                @Override protected void runAfter(MethodHookParam param) throws Exception {
+                    record(param, session, token, deadline);
+                }
+
+                @Override protected boolean countsAsRun(MethodHookParam param) {
+                    return Boolean.TRUE.equals(param.getObjectExtra(RECORDED));
+                }
+            });
+            if (capture != null) fileSession = session;
+        } catch (ReflectiveOperationException | IOException | RuntimeException | LinkageError error) {
+            control.failed(error);
+        }
+    }
+
+    private synchronized void record(MethodHookParam param, String session, String token, long deadline)
+            throws Exception {
+        if (param.hasThrowable() || !session.equals(fileSession)) return;
+        long now = SystemClock.elapsedRealtimeNanos();
+        if (now >= deadline) {
+            stop();
+            return;
+        }
+        CaptureRequest request = (CaptureRequest) param.args[1];
+        if (!Integer.valueOf(CaptureRequest.CONTROL_CAPTURE_INTENT_PREVIEW)
+                .equals(request.get(CaptureRequest.CONTROL_CAPTURE_INTENT))) return;
+        CameraCaptureSession camera = (CameraCaptureSession) param.args[0];
+        CaptureResult result = (CaptureResult) param.args[2];
+        String row = token + " " + now + " " + frame(camera, result) + "\n";
+        if (frames == null) frames = new FileOutputStream(frameFile, true);
+        frames.write(row.getBytes(StandardCharsets.UTF_8));
+        param.setObjectExtra(RECORDED, Boolean.TRUE);
+    }
+
+    private void stop() throws IOException {
+        fileSession = null;
+        if (capture != null) {
+            HookDiagnostics.unhook(capture);
+            capture = null;
+        }
+        if (frames != null) {
+            FileOutputStream stream = frames;
+            frames = null;
+            stream.close();
+        }
     }
 
     private static JSONObject frame(CameraCaptureSession camera, CaptureResult result)

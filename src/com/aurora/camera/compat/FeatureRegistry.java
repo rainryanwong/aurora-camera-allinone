@@ -9,7 +9,8 @@ public final class FeatureRegistry {
     private FeatureRegistry() {}
     public static List<HookPlan> resolve(Host host, String cameraDataDir) throws ReflectiveOperationException {
         List<HookPlan> plans = new ArrayList<>();
-        com.aurora.camera.compat.filter.LutRuntime229 lut=new com.aurora.camera.compat.filter.LutRuntime229(host);
+        // Only the three filter consumers need this shared runtime.
+        LutBindings lut = new LutBindings(host);
         add(plans, "NaturalBeautyHooks", "自然美颜", () -> NaturalBeautyHooks.resolve(host));
         add(plans, "LegendaryClickHooks", "传奇一瞬入口", () -> LegendaryClickHooks.resolve(host));
         add(plans, "AiIconHooks", "AI 图标", () -> AiIconHooks.resolve(host));
@@ -39,17 +40,19 @@ public final class FeatureRegistry {
         add(plans, "AiEntryHooks", "AI 入口", () -> AiEntryHooks.resolve(host));
         add(plans, "NightVideoHooks", "夜景录像", () -> NightVideoHooks.resolve(host));
         add(plans, "ApertureHooks", "光圈控制", () -> ApertureHooks.resolve(host));
-        add(plans, "StyleHooks", "原色摄影风格与 AI 调试", () -> StyleHooks.resolve(host));
+        add(plans, "StyleHooks", "原色摄影风格", () -> StyleHooks.resolve(host));
+        add(plans, "AiDebugMenu", "AI 帮拍菜单与调试界面", () -> StyleHooks.resolveAi(host));
         add(plans, "BottomEvHooks", "取景曝光补偿", () -> BottomEvHooks.resolve(host));
         add(plans, "VideoSettingsHooks", "录像设置与收音", () -> VideoSettingsHooks.resolve(host));
-        add(plans, "VideoWatermarkUiHooks", "录像水印界面", () -> VideoWatermarkUiHooks.resolve(host));
+        add(plans, "VideoOpenGate", "录像片门全开", () -> new VideoOpenGate(host));
+        add(plans, "VideoWatermarkHooks", "视频水印", () -> com.aurora.camera.videowm.VideoWatermarkHooks.resolve(host));
         add(plans, "CinematicHooks", "电影模式", () -> CinematicHooks.resolve(host));
         add(plans, "LensRouteHooks", "镜头路由", () -> LensRouteHooks.resolve(host));
         // Its T() before callback supplies Night tokens before saved-menu migration.
         add(plans, "Night211Hooks", "夜景光圈与滤镜", () -> Night211Hooks.resolve(host));
         add(plans, "NightPaletteRenderHooks", "夜景滤镜预览", () -> NightPaletteRenderHooks.resolve(host));
         add(plans, "GripAndMenuHooks", "手柄与相机菜单", () -> GripAndMenuHooks.resolve(host));
-        add(plans, "Settings211Hooks", "实验室与水印设置", () -> Settings211Hooks.resolve(host));
+        add(plans, "Settings211Hooks", "实验室设置", () -> Settings211Hooks.resolve(host));
         add(plans, "ViewfinderDebugHooks", "取景调试选项", () -> ViewfinderDebugHooks.resolve(host));
         add(plans, "PreviewDiagnosticsHooks", "预览逐帧诊断", () -> PreviewDiagnosticsHooks.resolve(host, cameraDataDir));
         add(plans, "CameraCloudControls", "相机云控", () -> CameraCloudControls.resolve(host));
@@ -57,7 +60,7 @@ public final class FeatureRegistry {
         add(plans, "Hdr211Hooks", "HDR 拍照路径", () -> Hdr211Hooks.resolve(host));
         add(plans, "HdrPresentation214Hooks", "HDR 图标与提示", () -> HdrPresentation214Hooks.resolve(host));
         add(plans, "Sound211Hooks", "快门声音", () -> Sound211Hooks.resolve(host));
-        add(plans, "FilterManager211Hooks", "摄影风格滤镜管理", () -> FilterManager211Hooks.resolve(host,lut));
+        add(plans, "FilterManager211Hooks", "摄影风格滤镜管理", () -> FilterManager211Hooks.resolve(host,lut.get()));
         add(plans, "AiReset211Hooks", "AI 复位与变焦", () -> AiReset211Hooks.resolve(host));
         add(plans, "Watermark217Hooks", "水印渲染", () -> Watermark217Hooks.resolve(host));
         add(plans, "PhotoStyleSwitchHooks", "摄影风格切换", () -> PhotoStyleSwitchHooks.resolve(host));
@@ -66,13 +69,13 @@ public final class FeatureRegistry {
         add(plans, "MotionCaptureRetainHooks", "运动抓拍状态保留", () -> MotionCaptureRetainHooks.resolve(host));
         add(plans, "NearRangeLensHooks", "近距自适应镜头切换优化", () -> new NearRangeLensHooks(host));
         add(plans, "FocusDistance75mm", "中长焦镜头对焦距离", () -> new TelephotoFocusDistance(host));
-        add(plans, "WatermarkNameHooks", "水印文件命名", () -> WatermarkNameHooks.resolve(host,lut));
+        add(plans, "WatermarkNameHooks", "水印文件命名", () -> WatermarkNameHooks.resolve(host,lut.get()));
         add(plans, "Street217Hooks", "街拍与传奇一瞬界面", () -> Street217Hooks.resolve(host));
         add(plans, "RecipeSharing219Hooks", "摄影配方分享", () -> RecipeSharing219Hooks.resolve(host));
         add(plans, "StreetShutter229Hooks", "街拍快门材质", () -> StreetShutter229Hooks.resolve(host));
         add(plans, "ShutterStyleHooks", "快门样式", () -> ShutterStyleHooks.resolve(host));
         add(plans, "AlwaysShutter229Hooks", "耳机模式快门声", () -> AlwaysShutter229Hooks.resolve(host));
-        add(plans, "Lut229Hooks", "导入 LUT", () -> Lut229Hooks.resolve(host,lut));
+        add(plans, "Lut229Hooks", "导入 LUT", () -> Lut229Hooks.resolve(host,lut.get()));
         add(plans, "CamStyleBindingHooks", "摄影风格滤镜重新绑定", () -> new com.aurora.camera.compat.filter.CamStyleBindingHooks(host));
         add(plans, "PhotoFilterPerformance", "拍照滤镜加载与缓存", () -> new com.aurora.camera.compat.filter.PhotoFilterPerformance(host));
         add(plans, "VideoLutQuality229Hooks", "滤镜视频规格", () -> VideoLutQuality229Hooks.resolve(host));
@@ -90,6 +93,23 @@ public final class FeatureRegistry {
         return plans;
     }
 
+    private static final class LutBindings {
+        private final Host host;
+        private com.aurora.camera.compat.filter.LutRuntime229 runtime;
+        private ReflectiveOperationException unavailable;
+
+        LutBindings(Host host) { this.host = host; }
+
+        com.aurora.camera.compat.filter.LutRuntime229 get() throws ReflectiveOperationException {
+            if (unavailable != null) throw unavailable;
+            if (runtime == null) {
+                try { runtime = new com.aurora.camera.compat.filter.LutRuntime229(host); }
+                catch (ReflectiveOperationException e) { unavailable = e; throw e; }
+            }
+            return runtime;
+        }
+    }
+
     @FunctionalInterface
     private interface Resolver {
         HookPlan resolve() throws ReflectiveOperationException;
@@ -98,7 +118,14 @@ public final class FeatureRegistry {
     private static void add(List<HookPlan> plans, String group, String title, Resolver resolver)
             throws ReflectiveOperationException {
         HookDiagnostics.resolving(group);
-        HookPlan plan = resolver.resolve();
+        HookPlan plan;
+        try {
+            plan = resolver.resolve();
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError failure) {
+            HookDiagnostics.resolutionFailed(failure);
+            android.util.Log.e("AuroraCameraCompat", "Unable to resolve " + group, failure);
+            return;
+        }
         HookDiagnostics.resolved();
         plans.add(new HookPlan() {
             @Override public String id() { return plan.id(); }

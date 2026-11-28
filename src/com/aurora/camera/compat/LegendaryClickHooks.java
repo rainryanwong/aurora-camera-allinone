@@ -2,6 +2,7 @@ package com.aurora.camera.compat;
 
 import com.aurora.camera.diagnostics.HookDiagnostics;
 
+import android.content.Context;
 import android.view.View;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -15,6 +16,7 @@ public final class LegendaryClickHooks {
         final Method click = host.method("c6.d", "onClick", View.class);
         final Method defaultValue = host.method("r2.B", "getDefaultValue", int.class);
         final Method busy = host.method("V6.b", "b");
+        final Method showToast = host.method("E1.g5", "d", Context.class, String.class);
         final Method position = host.method(
                 "androidx.recyclerview.widget.RecyclerView$C", "getBindingAdapterPosition");
         final Field adapter = host.field("c6.d", "a");
@@ -57,6 +59,7 @@ public final class LegendaryClickHooks {
                         if (index >= 0 && index < list.size()
                                 && blocked((String) token.get(list.get(index)))) {
                             p.setResult(null);
+                            showToast.invoke(null, ((View) p.args[0]).getContext(), "本设备不支持");
                         }
                     }
                 });

@@ -36,7 +36,7 @@ public final class AmbilightHooks {
     }
 
     public static HookPlan resolve(final Host host) throws ReflectiveOperationException {
-        final ModuleAssets assets = ModuleAssets.load(host.moduleApkPath);
+        final ModuleAssets assets = new ModuleAssets(host.moduleApkPath);
         final Class<?> info = host.type(Q + "splitrequest.splitinfo.SplitInfo");
         final Class<?> managerInterface = host.type(Q + "splitrequest.splitinfo.SplitInfoManager");
         final Class<?> splitTask = host.type(P + "tasks.Task");

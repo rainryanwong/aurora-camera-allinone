@@ -245,12 +245,13 @@ public final class AuthVignette239Hooks {
                     EGL14.eglMakeCurrent(display,EGL14.EGL_NO_SURFACE,EGL14.EGL_NO_SURFACE,EGL14.EGL_NO_CONTEXT);if(surface!=EGL14.EGL_NO_SURFACE)EGL14.eglDestroySurface(display,surface);if(context!=EGL14.EGL_NO_CONTEXT)EGL14.eglDestroyContext(display,context);EGL14.eglReleaseThread();
                 }
             }
-            void uniforms(Object renderer){
+            void initializeUniforms(Object renderer){
                 int program=(Integer)XposedHelpers.getObjectField(renderer,"j");GLES20.glUseProgram(program);
                 for(String name:new String[]{"DarkStrength","SmoothStartValue","SmoothEndValue","Falloff","NoiseStrength"}){
                     float value=name.equals("SmoothStartValue")?1.4f:name.equals("SmoothEndValue")?.2f:name.equals("NoiseStrength")?0f:1f;GLES20.glUniform1f(GLES20.glGetUniformLocation(program,name),value);
                 }
-                GLES20.glUniform1f(GLES20.glGetUniformLocation(program,"CurrentTime"),SystemClock.elapsedRealtime());
+                int time=GLES20.glGetUniformLocation(program,"CurrentTime");
+                XposedHelpers.setAdditionalInstanceField(renderer,"aurora.auth239.time",time);
             }
             public void install(){
                 try{unavailable=AuthReadiness239.check();template=asset();if(unavailable==null)reload();}
@@ -273,11 +274,15 @@ public final class AuthVignette239Hooks {
                 HookDiagnostics.hookMethod(library,new StrictHook(){@Override protected void before(MethodHookParam p){if(p.thisObject==h.loader&&"MiFilterSDK".equals(p.args[0])){String path=h.moduleApkPath+"!/lib/arm64-v8a/libMiFilterSDK.so";Log.i("AuroraAUTH241","preview_library_resolved path="+path);p.setResult(path);}}});
                 runtime.install();
                 HookDiagnostics.hookMethod(shaderSource,new StrictHook(){@Override protected void before(MethodHookParam p){p.setResult(AuthFormula239.preview(template,body));}});
-                HookDiagnostics.hookMethod(shaderInit,new StrictHook(){@Override protected void after(MethodHookParam p){if(!p.hasThrowable()){uniforms(p.thisObject);XposedHelpers.setAdditionalInstanceField(p.thisObject,"aurora.auth239.revision",revision);}else Log.e("AuroraAUTH248","java_shader_compile_failed "+runtime.identity(),p.getThrowable());}});
+                HookDiagnostics.hookMethod(shaderInit,new StrictHook(){@Override protected void after(MethodHookParam p){if(!p.hasThrowable()){initializeUniforms(p.thisObject);XposedHelpers.setAdditionalInstanceField(p.thisObject,"aurora.auth239.revision",revision);}else Log.e("AuroraAUTH248","java_shader_compile_failed "+runtime.identity(),p.getThrowable());}});
                 HookDiagnostics.hookMethod(shaderDraw,new StrictHook(){@Override protected void before(MethodHookParam p)throws Throwable{
                     Object previous=XposedHelpers.getAdditionalInstanceField(p.thisObject,"aurora.auth239.revision");
                     if(previous!=null&&(Long)previous!=revision){int program=(Integer)XposedHelpers.getObjectField(p.thisObject,"j");XposedHelpers.callStaticMethod(type("com.xiaomi.gl.MIGL"),"glDeleteProgram",program,"AUTH239");shaderInit.invoke(p.thisObject);}
-                    uniforms(p.thisObject);
+                    Integer time=(Integer)XposedHelpers.getAdditionalInstanceField(p.thisObject,"aurora.auth239.time");
+                    if(time!=null&&time>=0){
+                        GLES20.glUseProgram((Integer)XposedHelpers.getObjectField(p.thisObject,"j"));
+                        GLES20.glUniform1f(time,SystemClock.elapsedRealtime());
+                    }
                 }});
                 String ready="AuroraAUTH248 hooks_ready "+runtime.identity();Log.i("AuroraAUTH248",ready);XposedBridge.log(ready);
             }

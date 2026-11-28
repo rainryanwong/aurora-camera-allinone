@@ -16,7 +16,7 @@ import java.util.*;
 /** Publish the same seven verified templates to Camera's own native photo-watermark parser. */
 public final class CameraWatermark247Hooks implements HookPlan {
     private static final String TAG="AuroraCameraWm247", GUARD="247.camera.watermark.guard", ROOT="247.camera.watermark.root";
-    private final Host host;
+    private final Editor245Assets assets;
     private final Method context, parse, support;
     private final Field groupPath, groupItems, itemPath;
     private final Class<?> photoManager;
@@ -25,7 +25,7 @@ public final class CameraWatermark247Hooks implements HookPlan {
     private String lastParsed;
 
     private CameraWatermark247Hooks(Host host) throws ReflectiveOperationException {
-        this.host=host;
+        assets=new Editor245Assets(host.moduleApkPath);
         context=host.method("com.xiaomi.camera.basic.Global","getContext");
         parse=host.method("Gg.r","g",File.class,ArrayList.class,boolean.class);
         support=host.method("Gg.O","f"); photoManager=host.type("Gg.T");
@@ -60,7 +60,7 @@ public final class CameraWatermark247Hooks implements HookPlan {
                 // Keep our publication and that parse together; do not alter native copying or readiness.
                 Editor245Assets.Guard guard=Editor245Assets.lock(root.getParentFile());
                 p.setObjectExtra(GUARD,guard); available=Collections.emptySet();
-                Editor245Assets.Publication result=Editor245Assets.publishLocked(root.getParentFile(),host.moduleApkPath);
+                Editor245Assets.Publication result=assets.publishLocked(root.getParentFile());
                 available=Collections.unmodifiableSet(new LinkedHashSet<>(result.groups));
                 Log.i(TAG,"verified native photo-watermark resources; created="+result.created+"; groups="+available);
                 if (!result.conflicts.isEmpty()) Log.e(TAG,"Existing camera watermark conflicts preserved; excluded groups="+result.conflicts);

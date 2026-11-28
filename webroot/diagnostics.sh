@@ -2,6 +2,8 @@
 set -eu
 
 module=$(CDPATH='' cd -- "${0%/*}/.." && pwd)
+MODDIR=$module
+. "$module/root-compat.sh"
 camera=/data/user/0/com.android.camera/cache
 editor=/data/user/0/com.miui.mediaeditor/cache
 
@@ -51,10 +53,22 @@ check_mount() {
     source=$2
     target=$3
     logfile=$4
+    staged=${5:-}
     if [ ! -f "$module/$source" ]; then
         state=skipped
     elif [ -n "$provider" ] && [ -r "/proc/$provider/root$target" ]; then
-        if cmp -s "$module/$source" "/proc/$provider/root$target"; then state=mounted
+        mounted="/proc/$provider/root$target"
+        if [ -n "$staged" ]; then
+            if id=$(stat -Lc '%d:%i' "$staged") &&
+                [ "$(stat -Lc '%d:%i' "$mounted")" = "$id" ] &&
+                { [ "${6:-}" = bind ] ||
+                    { visible_id=$(root_path_mount_id "$mounted") &&
+                      awk -v id="$visible_id" -v t="$target" '$1==id && $5==t {ro=("," $6 "," ~ /,ro,/)} END {exit !ro}' "/proc/$provider/mountinfo"; }; }; then
+                state=mounted
+            else
+                state=mount-error
+            fi
+        elif cmp -s "$module/$source" "$mounted"; then state=mounted
         else state=mount-error
         fi
     elif [ -n "$provider" ]; then
@@ -65,34 +79,46 @@ check_mount() {
     printf 'mount\t%s\t%s\t%s\t%s\n' "$group" "$state" "$target" "$logfile"
 }
 
-native_status() {
-    provider=$(ps -A -o PID,NAME | awk '$2 ~ /camera.provider/ && !seen++ {print $1}')
-    check_mount 'palette' 'payload/com.xiaomi.plugin.filter.so' '/odm/lib64/camera/plugins/com.xiaomi.plugin.filter.so' activation.log
-    check_mount 'auth' 'auth239/payload/libMiPhotoFilter.so' '/odm/lib64/libMiPhotoFilter.so' auth239/formula-service.log
-    check_mount 'natural-graph' 'natural-payload/com.qti.feature2.gs.sm8650.so' '/odm/lib64/com.qti.feature2.gs.sm8650.so' natural-activation.log
+natural_status() {
+    stage=/dev/aurora_natural/
+    night_stage=/dev/aurora_natural_night/com.mi.node.aiasd.so
+    if [ "${1:-}" = deep ]; then
+        stage=
+        night_stage=
+    fi
+    check_mount 'natural-graph' 'natural-payload/com.qti.feature2.gs.sm8650.so' '/odm/lib64/com.qti.feature2.gs.sm8650.so' natural-activation.log "${stage:+${stage}com.qti.feature2.gs.sm8650.so}"
     for tuning in "$module"/natural-payload/*.bin; do
         [ -f "$tuning" ] || continue
         name=${tuning##*/}
-        check_mount "$name" "natural-payload/$name" "/odm/lib64/camera/$name" natural-activation.log
+        check_mount "$name" "natural-payload/$name" "/odm/lib64/camera/$name" natural-activation.log "${stage:+$stage$name}"
     done
-    check_mount 'natural-photo' 'natural-payload/com.xiaomi.plugin.offlinepostproc.so' '/odm/lib64/camera/plugins/com.xiaomi.plugin.offlinepostproc.so' natural-activation.log
+    check_mount 'natural-photo' 'natural-payload/com.xiaomi.plugin.offlinepostproc.so' '/odm/lib64/camera/plugins/com.xiaomi.plugin.offlinepostproc.so' natural-activation.log "${stage:+${stage}com.xiaomi.plugin.offlinepostproc.so}"
     if [ -f "$module/enable-natural-arcsoft-night" ]; then
-        check_mount 'night' 'arcsoft-night-payload/com.mi.node.aiasd.so' '/odm/lib64/camera/components/com.mi.node.aiasd.so' arcsoft-night-activation.log
+        check_mount 'night' 'arcsoft-night-payload/com.mi.node.aiasd.so' '/odm/lib64/camera/components/com.mi.node.aiasd.so' arcsoft-night-activation.log "$night_stage"
     else
         printf 'mount\tnight\tskipped\t\tarcsoft-night-activation.log\n'
     fi
+}
+
+provider_pid() {
+    ps -A -o PID,NAME | awk '$2 ~ /camera.provider/ && !seen++ {print $1}'
+}
+
+native_status() {
+    provider=$(provider_pid)
+    check_mount 'palette' 'payload/com.xiaomi.plugin.filter.so' '/odm/lib64/camera/plugins/com.xiaomi.plugin.filter.so' activation.log "$module/payload/com.xiaomi.plugin.filter.so" bind
+    check_mount 'auth' 'auth239/payload/libMiPhotoFilter.so' '/odm/lib64/libMiPhotoFilter.so' auth239/formula-service.log "$module/auth239/payload/libMiPhotoFilter.so" bind
+    natural_status
+    for sensor in "$module"/open-gate-sensors/*.bin; do
+        [ -f "$sensor" ] || continue
+        name=${sensor##*/}
+        check_mount "$name" "open-gate-sensors/$name" "/odm/lib64/camera/$name" mount.log "$sensor"
+    done
     if [ -n "$provider" ]; then
         if grep -q ' /odm/lib64/camera/plugins ' "/proc/$provider/mountinfo" &&
             grep -q ' /odm/etc/camera/xiaomi ' "/proc/$provider/mountinfo" &&
-            cmp -s "$module/payload/odm/lib64/camera/plugins/com.xiaomi.plugin.m3style.so" \
-                "/proc/$provider/root/odm/lib64/camera/plugins/com.xiaomi.plugin.m3style.so" &&
-            cmp -s "$module/payload/odm/lib64/camera/plugins/com.xiaomi.plugin.m3grain.so" \
-                "/proc/$provider/root/odm/lib64/camera/plugins/com.xiaomi.plugin.m3grain.so"; then
+           root_check_m3_visibility "/proc/$provider/root" >/dev/null; then
             state=mounted
-            for graph in leicasnapshot.json normalsnapshot.json satsnapshot.json; do
-                cmp -s "/dev/phoenix_m3/graphs/$graph" "/proc/$provider/root/odm/etc/camera/xiaomi/$graph" ||
-                    state=mount-error
-            done
         else
             state=mount-error
         fi
@@ -175,6 +201,7 @@ export_log() {
 
 case "${1:-}" in
     status) status ;;
+    verify-natural) provider=$(provider_pid); natural_status deep ;;
     save-camera) export_log Camera camera_logs ;;
     export-diagnostics) export_log Diagnostics diagnostic_logs ;;
     *) printf '%s\n' 'Unknown diagnostics operation' >&2; exit 2 ;;

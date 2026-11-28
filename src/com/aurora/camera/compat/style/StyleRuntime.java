@@ -14,11 +14,29 @@ public final class StyleRuntime {
     private final Map<String, Method> methods = new HashMap<>();
     private final Map<String, Field> fields = new HashMap<>();
     private final Map<String, Constructor<?>> constructors = new HashMap<>();
-    private final Object unsafe;
-    private final Method allocate;
+    private Object unsafe;
+    private Method allocate;
 
-    public StyleRuntime(Host host) throws ReflectiveOperationException {
+    private StyleRuntime(Host host) throws ReflectiveOperationException {
         this.host = host;
+        link("repo.a","g2.a","a","r2.n1");
+        link("repo.get","Xh.b","x","java.lang.Object","java.lang.Class");
+        field("fragment.mode","com.android.camera.fragment.h","mCurrentMode","int");
+    }
+
+    public static StyleRuntime forStyle(Host host) throws ReflectiveOperationException {
+        StyleRuntime runtime = new StyleRuntime(host);
+        runtime.bindStyle();
+        return runtime;
+    }
+
+    public static StyleRuntime forAi(Host host) throws ReflectiveOperationException {
+        StyleRuntime runtime = new StyleRuntime(host);
+        runtime.bindAi();
+        return runtime;
+    }
+
+    private void bindStyle() throws ReflectiveOperationException {
         link("style.init","r2.m","u","void","com.android.camera.data.data.C");
         link("style.default","r2.m","getDefaultValue","java.lang.String","int");
         link("style.value","r2.m","getComponentValue","java.lang.String","int");
@@ -33,19 +51,40 @@ public final class StyleRuntime {
         link("cap.resources","l9.h","E2","boolean","l9.g");
         link("raw","com.android.camera.data.data.n","a0","boolean","int");
         link("ultraRaw","com.android.camera.data.data.n","p0","boolean","int","l9.g");
-        link("repo.a","g2.a","a","r2.n1");
+        link("fragment.string","androidx.fragment.app.Fragment","getString","java.lang.String","int");
+        link("context.string","android.content.Context","getString","java.lang.String","int");
+        link("dropdown.bind","Xl.a","invoke","java.lang.Object","java.lang.Object");
+        link("editor.item","u2.y","G","gv.A","u2.y","java.util.List","r2.m");
+        link("style.view","p5.u","initView","void","android.view.View");
+        link("preview","m6.n","m","int","boolean");
+        field("mode","com.android.camera.data.data.c","mCurrentMode","int");
+        field("items","com.android.camera.data.data.c","mItems","java.util.List");
+        field("cap","r2.m","b","l9.g");
+        field("style.portrait","r2.m","c","boolean");
+        for(String n:new String[]{"c","g","h","j"})field("item."+n,"com.android.camera.data.data.d",n,"int");
+        field("input.mode","com.android.camera.data.data.C","a","int");
+        field("input.front","com.android.camera.data.data.C","b","int");
+        field("input.cap","com.android.camera.data.data.C","c","l9.g");
+        field("item.value","com.android.camera.data.data.d","r","java.lang.String");
+        field("item.title","com.android.camera.data.data.d","l","int");
+        field("item.text","com.android.camera.data.data.d","o","java.lang.String");
+        field("style.component","p5.u","b","com.android.camera.data.data.c");
+        field("dropdown.kind","Xl.a","a","int");
+        field("dropdown.owner","Xl.a","b","java.lang.Object");
+        field("editor.cap","com.android.camera.data.data.c","mCapabilities","l9.g");
+        field("preview.state","m6.n","E","m6.n$a");
+        field("preview.mode","m6.n$a","d","int");
+        field("preview.front","m6.n$a","l","int");
+    }
+
+    private void bindAi() throws ReflectiveOperationException {
         link("repo.g","g2.a","g","u2.Y");
         link("repo.j","g2.a","j","v2.F0");
-        link("repo.get","Xh.b","x","java.lang.Object","java.lang.Class");
         link("prefs.bool","Xh.a","h","boolean","java.lang.String","boolean");
         link("property.bool","miuix.core.util.SystemProperties","getBoolean","boolean","java.lang.String","boolean");
         link("settings.add","com.android.camera.fragment.settings.CameraAdvancePreferenceFragment","addCurrentPreferences","void");
         link("fragment.activity","androidx.fragment.app.Fragment","requireActivity","androidx.fragment.app.m");
         link("fragment.resources","androidx.fragment.app.Fragment","getResources","android.content.res.Resources");
-        link("fragment.string","androidx.fragment.app.Fragment","getString","java.lang.String","int");
-        link("context.string","android.content.Context","getString","java.lang.String","int");
-        link("dropdown.bind","Xl.a","invoke","java.lang.Object","java.lang.Object");
-        link("editor.item","u2.y","G","gv.A","u2.y","java.util.List","r2.m");
         link("pref.find","androidx.preference.PreferenceGroup","k0","androidx.preference.Preference","java.lang.CharSequence");
         link("pref.key","androidx.preference.Preference","a0","void","java.lang.String");
         link("pref.title","androidx.preference.Preference","e0","void","java.lang.String");
@@ -62,11 +101,13 @@ public final class StyleRuntime {
         link("ai.rt","com.android.camera.features.mode.ai.FragmentAi","rt","void","boolean");
         link("ai.se","com.android.camera.features.mode.ai.FragmentAi","Se","void","boolean");
         link("ai.st","com.android.camera.features.mode.ai.FragmentAi","st","void","boolean","boolean");
+        link("ai.resume","com.android.camera.features.mode.ai.FragmentAi","onResume","void");
+        link("fragment.layout","com.android.camera.fragment.a","baseUpdateView","void","android.view.View","android.os.Bundle");
+        link("fragment.view","androidx.fragment.app.Fragment","getView","android.view.View");
+        link("fragment.args","androidx.fragment.app.Fragment","getArguments","android.os.Bundle");
         link("ai.view","com.android.camera.features.mode.ai.FragmentAi","updateView","void","android.view.View","android.os.Bundle");
         link("ai.panel","com.android.camera.features.mode.ai.FragmentAi","pt","boolean","com.android.camera.features.mode.ai.FragmentAi","boolean");
-        link("style.view","p5.u","initView","void","android.view.View");
         link("view.layout","android.view.View","setLayoutParams","void","android.view.ViewGroup$LayoutParams");
-        link("preview","m6.n","m","int","boolean");
         link("debug.b","z3.d","b","java.util.ArrayList");
         link("debug.e","z3.d","e","java.util.ArrayList");
         link("debug.f","z3.d","f","java.util.List");
@@ -102,32 +143,12 @@ public final class StyleRuntime {
         link("orientation.rect","com.android.camera.data.data.F","i","android.graphics.Rect");
         ctor("click.raw","X9.V2","int");
         ctor("click.normal","X9.o1","int");
-
-        field("mode","com.android.camera.data.data.c","mCurrentMode","int");
-        field("fragment.mode","com.android.camera.fragment.h","mCurrentMode","int");
-        field("items","com.android.camera.data.data.c","mItems","java.util.List");
-        field("cap","r2.m","b","l9.g");
-        field("style.portrait","r2.m","c","boolean");
-        for(String n:new String[]{"c","g","h","j"})field("item."+n,"com.android.camera.data.data.d",n,"int");
-        field("input.mode","com.android.camera.data.data.C","a","int");
-        field("input.front","com.android.camera.data.data.C","b","int");
-        field("input.cap","com.android.camera.data.data.C","c","l9.g");
-        field("item.value","com.android.camera.data.data.d","r","java.lang.String");
-        field("item.title","com.android.camera.data.data.d","l","int");
-        field("item.text","com.android.camera.data.data.d","o","java.lang.String");
         field("settings.group","com.android.camera.fragment.settings.b","mPreferenceGroup","androidx.preference.PreferenceScreen");
         field("pref.t","androidx.preference.Preference","t","boolean");
         field("pref.K","androidx.preference.Preference","K","java.lang.Object");
         field("pref.e","androidx.preference.Preference","e","androidx.preference.Preference$c");
         field("ai.g","com.android.camera.features.mode.ai.FragmentAi","g","android.widget.LinearLayout");
         field("ai.H","com.android.camera.features.mode.ai.FragmentAi","H","android.view.View");
-        field("style.component","p5.u","b","com.android.camera.data.data.c");
-        field("dropdown.kind","Xl.a","a","int");
-        field("dropdown.owner","Xl.a","b","java.lang.Object");
-        field("editor.cap","com.android.camera.data.data.c","mCapabilities","l9.g");
-        field("preview.state","m6.n","E","m6.n$a");
-        field("preview.mode","m6.n$a","d","int");
-        field("preview.front","m6.n$a","l","int");
         field("debug.original","z3.d","i","boolean");
         field("menu.map","y3.d","b","android.util.SparseArray");
         field("menu.factory","y3.d","f","Z4.m");

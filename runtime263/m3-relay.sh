@@ -3,11 +3,6 @@ MODDIR=${0%/*}
 exec >"$MODDIR/aux-relay.log" 2>&1
 set -e
 APP=/data/user/0/com.android.camera/files
-while :; do
-    [ ! -e "$MODDIR/disable" ] && [ ! -e "$MODDIR/remove" ] || exit 0
-    [ ! -d "$APP" ] || break
-    sleep 1
-done
 DEST=$APP/phoenix_m3_aux
 mkdir -p "$DEST"
 chown "$(/system/bin/stat -c %u:%g "$APP")" "$DEST"

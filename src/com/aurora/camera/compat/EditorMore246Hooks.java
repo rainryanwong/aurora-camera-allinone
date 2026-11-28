@@ -9,7 +9,6 @@ import android.util.Log;
 import com.aurora.camera.compat.editor.more246.EditorMore246Repository;
 import com.aurora.camera.compat.editor.more246.EditorMore246Repository.Materialized;
 import com.aurora.camera.compat.editor.more246.EditorRecipe248;
-import com.aurora.camera.compat.editor.EditorLeicaFilters292;
 import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,7 +25,6 @@ public final class EditorMore246Hooks {
     private final Method renderBitmap;
     private final EditorRecipe248 recipeRenderer;
     private final boolean nativeCloud;
-    private final EditorLeicaFilters292 leicaFilters;
     private final Method itemId, itemDegree, liveSet;
     private final Class<?> photoServiceType;
     private final Method findService, obtainPhotoInfo, isLivePhoto;
@@ -61,7 +59,6 @@ public final class EditorMore246Hooks {
 
     public EditorMore246Hooks(Host h) throws ReflectiveOperationException {
         nativeCloud=h.usesNativeCloudFilter();
-        leicaFilters=new EditorLeicaFilters292(h);
         Class<?> item=h.type("ud.a"); categoryType=h.type("ud.b"); entryType=h.type("ud.e");
         localCatalog=h.method("qd.i","a"); app=h.field("qd.i","a");
         finalWriter=h.method("Bd.i$a","invokeSuspend",Object.class);
@@ -110,7 +107,6 @@ public final class EditorMore246Hooks {
     }
 
     public void install() {
-        leicaFilters.install();
         HookDiagnostics.hookMethod(localCatalog,new StrictHook() {
             @Override protected void after(MethodHookParam p) throws Throwable {
                 if (!p.hasThrowable()) p.setResult(categories((List<?>)p.getResult(),availableBindings(canUseRecipes())));

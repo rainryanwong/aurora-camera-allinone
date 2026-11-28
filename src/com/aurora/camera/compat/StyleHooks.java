@@ -12,12 +12,14 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import com.aurora.camera.compat.style.StyleDebugUi;
 import com.aurora.camera.compat.style.StyleRuntime;
+import de.robv.android.xposed.XposedHelpers;
 import java.lang.reflect.Method;
 import java.util.List;
 
 /** F25: real style construction, request-only RAW isolation, and live AI debug UI. */
 public final class StyleHooks {
     private static final String NATURAL = "原色·测试";
+    private static final String APPLIED_AI_DEBUG = "aurora.style.appliedAiDebug";
     private static final String PREVIOUS = "aurora.style.previousScope";
     private StyleHooks() {}
 
@@ -41,6 +43,7 @@ public final class StyleHooks {
     private static final class AiViewScope {
         final Object owner;
         boolean consumed;
+        boolean debug;
         AiViewScope(Object owner){this.owner=owner;}
     }
     /** Preserve callback failures as call failures, instead of Xposed logging and resuming. */
@@ -55,16 +58,57 @@ public final class StyleHooks {
         }
     }
 
+    private static Runnable prepareAiMenuGesture(Host host) throws ReflectiveOperationException {
+        Class<?> ai = host.type("com.android.camera.features.mode.ai.AiModule");
+        Method gesture = host.method("r6.W", "u9", android.view.MotionEvent.class, float.class);
+        Method module = host.method("r6.W", "ja");
+        Method busy = host.method("r6.W", "Wa");
+        Method panels = host.method("R6.j0", "a");
+        Method hasPanel = host.method("R6.j0", "e", int.class, int.class);
+        Method panelList = host.method("R6.j0", "b", int.class);
+        Method openPanel = host.method("R6.j0", "h", int.class, int.class, int.class);
+        Method split = host.method("K2.b", "W");
+        Method bounds = host.method("K2.b", "o", int.class);
+        Method zoomPanel = host.method("W6.c", "a");
+        Method zoomOpen = host.method("W6.c", "Ce");
+        Method menuPanel = host.method("R6.s1", "a");
+        Method showing = host.method("T6.a", "isShowing");
+        Method close = host.method("T6.a", "bq", int.class, int.class);
+        return () -> HookDiagnostics.hookMethod(gesture, new StrictHook() {
+            @Override protected void after(MethodHookParam p) throws ReflectiveOperationException {
+                if (p.hasThrowable() || (boolean) p.getResult()
+                        || !ai.isInstance(((java.util.Optional<?>) module.invoke(p.thisObject)).orElse(null))
+                        || (boolean) busy.invoke(p.thisObject)) return;
+                Object hostPanel = ((java.util.Optional<?>) panels.invoke(null)).orElse(null);
+                if (hostPanel == null || (boolean) hasPanel.invoke(hostPanel, 7, 184)) return;
+                if ((boolean) split.invoke(null)) {
+                    Object slider = ((java.util.Optional<?>) zoomPanel.invoke(null)).orElse(null);
+                    boolean occupied = !((List<?>) panelList.invoke(hostPanel, 7)).isEmpty()
+                            || (slider != null && (boolean) zoomOpen.invoke(slider));
+                    android.view.MotionEvent touch = (android.view.MotionEvent) p.args[0];
+                    if (occupied && touch.getRawX() < ((Rect) bounds.invoke(null, 1)).left) return;
+                }
+                Object menu = ((java.util.Optional<?>) menuPanel.invoke(null)).orElse(null);
+                boolean open = menu != null && (boolean) showing.invoke(menu);
+                boolean pullDown = (float) p.args[1] > 0f;
+                if (pullDown && !open && !(boolean) hasPanel.invoke(hostPanel, 13, 255)) {
+                    openPanel.invoke(hostPanel, 13, 255, 1);
+                    p.setResult(true);
+                } else if (!pullDown && open) {
+                    close.invoke(menu, 2, 6);
+                    p.setResult(true);
+                }
+            }
+        });
+    }
+
     public static HookPlan resolve(Host host)throws ReflectiveOperationException {
-        final StyleRuntime r=new StyleRuntime(host);
-        final StyleDebugUi debugUi=new StyleDebugUi(r);
+        final StyleRuntime r=StyleRuntime.forStyle(host);
         final ThreadLocal<ResourceScope> resources=new ThreadLocal<>();
         final ThreadLocal<TitleScope> title=new ThreadLocal<>();
         final ThreadLocal<DropdownScope> dropdown=new ThreadLocal<>();
-        final ThreadLocal<AiViewScope> aiView=new ThreadLocal<>();
-        final ThreadLocal<Object> aiLayout=new ThreadLocal<>();
         return new HookPlan(){
-            @Override public String id(){return "natural-style-and-ai-debug";}
+            @Override public String id(){return "natural-style";}
             @Override public void install(){
                 HookDiagnostics.hookMethod(r.method("cap.resources"),new Hook(){
                     @Override void after(MethodHookParam p)throws Throwable{
@@ -152,76 +196,6 @@ public final class StyleHooks {
                         if((mode==163||mode==167||mode==225||mode==229||mode==168)&&r.bool("style.active",r.style(),mode))p.setResult(0);
                     }
                 });
-                HookDiagnostics.hookMethod(r.method("settings.add"),new Hook(){
-                    @Override void after(MethodHookParam p)throws Throwable{if(!p.hasThrowable())addSetting(r,p.thisObject);}
-                });
-                HookDiagnostics.hookMethod(r.method("menu.enabled"),new Hook(){
-                    @Override void before(MethodHookParam p)throws Throwable{
-                        boolean eligible=r.debug()||r.bool("screen.S",null)||r.bool("screen.U",null);
-                        p.setResult(eligible&&!r.bool("device.special",null)&&(Integer)p.args[0]==168);
-                    }
-                });
-                HookDiagnostics.hookMethod(r.method("debug.b"),new Hook(){@Override void before(MethodHookParam p)throws Throwable{p.setResult(debugUi.tokens());}});
-                HookDiagnostics.hookMethod(r.method("debug.e"),new Hook(){@Override void before(MethodHookParam p)throws Throwable{p.setResult(debugUi.quickMenu(p.thisObject));}});
-                HookDiagnostics.hookMethod(r.method("debug.f"),new Hook(){@Override void before(MethodHookParam p)throws Throwable{p.setResult(debugUi.topMenu(p.thisObject));}});
-                HookDiagnostics.hookMethod(r.method("debug.h"),new Hook(){
-                    @Override void before(MethodHookParam p)throws Throwable{
-                        android.util.SparseArray<?> map=(android.util.SparseArray<?>)r.get("menu.map",p.thisObject);
-                        p.setObjectExtra(PREVIOUS+".protocol6",map.indexOfKey(6)>=0);
-                    }
-                    @Override void after(MethodHookParam p)throws Throwable{
-                        if(!p.hasThrowable())debugUi.adjustProtocolMap(p.thisObject,(Boolean)p.getObjectExtra(PREVIOUS+".protocol6"));
-                    }
-                });
-                HookDiagnostics.hookMethod(r.method("debug.l"),new Hook(){
-                    @Override void before(MethodHookParam p)throws Throwable{if(p.thisObject.getClass()==r.type("z3.d"))p.setResult(debugUi.extraMenu());}
-                });
-                HookDiagnostics.hookMethod(r.method("ai.se"),new Hook(){@Override void before(MethodHookParam p)throws Throwable{layoutSe(r,p.thisObject,(Boolean)p.args[0]);p.setResult(null);}});
-                HookDiagnostics.hookMethod(r.method("ai.st"),new Hook(){@Override void before(MethodHookParam p)throws Throwable{layoutSt(r,p.thisObject,(Boolean)p.args[0],(Boolean)p.args[1]);p.setResult(null);}});
-                HookDiagnostics.hookMethod(r.method("ai.ks"),new Hook(){
-                    @Override void before(MethodHookParam p)throws Throwable{
-                        Object owner=aiLayout.get();
-                        if(owner!=null&&r.integer("fragment.mode",owner)==168&&r.debug())p.setResult(true);
-                    }
-                });
-                HookDiagnostics.hookMethod(r.method("ai.view"),new Hook(){
-                    @Override void before(MethodHookParam p)throws Throwable{
-                        p.setObjectExtra(PREVIOUS,aiView.get());
-                        p.setObjectExtra(PREVIOUS+".layout",aiLayout.get());
-                        // The original normal-layout commit is after Ns/Bt and the
-                        // W/R early return. A nested excluded owner must mask this frame.
-                        aiView.set(r.integer("fragment.mode",p.thisObject)==168
-                                &&!r.bool("screen.W",null)&&!r.bool("screen.R",null)
-                                ?new AiViewScope(p.thisObject):null);
-                        aiLayout.set(p.thisObject);
-                    }
-                    @Override void after(MethodHookParam p){
-                        restore(aiView,(AiViewScope)p.getObjectExtra(PREVIOUS));
-                        restore(aiLayout,p.getObjectExtra(PREVIOUS+".layout"));
-                    }
-                });
-                HookDiagnostics.hookMethod(r.method("ai.panel"),new Hook(){
-                    @Override void before(MethodHookParam p){p.setObjectExtra(PREVIOUS,aiLayout.get());aiLayout.set(p.args[0]);}
-                    @Override void after(MethodHookParam p){restore(aiLayout,p.getObjectExtra(PREVIOUS));}
-                });
-                HookDiagnostics.hookMethod(r.method("view.layout"),new Hook(){
-                    @Override void before(MethodHookParam p)throws Throwable{
-                        AiViewScope scope=aiView.get();
-                        if(scope==null||scope.consumed||r.get("ai.g",scope.owner)!=p.thisObject
-                                ||!(p.args[0] instanceof FrameLayout.LayoutParams))return;
-                        // Ns/Bt do not write g. Consume its first normal-layout
-                        // commit only; the later Ts->st setter retains its own margin.
-                        // Framework bridge class names are not part of this contract.
-                        scope.consumed=true;
-                        Object owner=scope.owner;
-                        FrameLayout.LayoutParams layout=(FrameLayout.LayoutParams)p.args[0];
-                        int z=(Integer)r.call("screen.z",null);boolean enabled=r.debug();
-                        if(r.bool("ai.ks",null))layout.topMargin=enabled?(int)(z*2.7f):
-                                ((Resources)r.call("fragment.resources",owner)).getDimensionPixelSize(0x7f070079)
-                                        +((Rect)r.call("orientation.rect",null)).bottom;
-                        else layout.bottomMargin=enabled?(int)(z*2.7f):z;
-                    }
-                });
                 HookDiagnostics.hookMethod(r.method("style.view"),new Hook(){
                     @Override void before(MethodHookParam p){
                         p.setObjectExtra(PREVIOUS,title.get());p.setObjectExtra(PREVIOUS+".entered",true);
@@ -276,6 +250,105 @@ public final class StyleHooks {
         };
     }
 
+    public static HookPlan resolveAi(Host host) throws ReflectiveOperationException {
+        final Runnable menuGesture = prepareAiMenuGesture(host);
+        final StyleRuntime r = StyleRuntime.forAi(host);
+        final StyleDebugUi debugUi = new StyleDebugUi(r);
+        final ThreadLocal<AiViewScope> aiView=new ThreadLocal<>();
+        final ThreadLocal<Object> aiLayout=new ThreadLocal<>();
+        return new HookPlan() {
+            @Override public String id() { return "ai-debug-menu-and-layout"; }
+            @Override public void install() {
+                HookDiagnostics.hookMethod(r.method("settings.add"),new Hook(){
+                    @Override void after(MethodHookParam p)throws Throwable{if(!p.hasThrowable())addSetting(r,p.thisObject);}
+                });
+                HookDiagnostics.hookMethod(r.method("menu.enabled"),new Hook(){
+                    @Override void before(MethodHookParam p)throws Throwable{
+                        boolean eligible=r.debug()||r.bool("screen.S",null)||r.bool("screen.U",null);
+                        p.setResult(eligible&&!r.bool("device.special",null)&&(Integer)p.args[0]==168);
+                    }
+                });
+                HookDiagnostics.hookMethod(r.method("debug.b"),new Hook(){@Override void before(MethodHookParam p)throws Throwable{p.setResult(debugUi.tokens());}});
+                // The editor and the live top bar both depend on this native candidate list.
+                HookDiagnostics.hookMethod(r.method("debug.e"),new Hook(){
+                    @Override void before(MethodHookParam p)throws Throwable{p.setResult(r.call("debug.a",p.thisObject));}
+                });
+                HookDiagnostics.hookMethod(r.method("debug.f"),new Hook(){@Override void before(MethodHookParam p)throws Throwable{p.setResult(debugUi.topMenu(p.thisObject));}});
+                HookDiagnostics.hookMethod(r.method("debug.h"),new Hook(){
+                    @Override void before(MethodHookParam p)throws Throwable{
+                        android.util.SparseArray<?> map=(android.util.SparseArray<?>)r.get("menu.map",p.thisObject);
+                        p.setObjectExtra(PREVIOUS+".protocol6",map.indexOfKey(6)>=0);
+                    }
+                    @Override void after(MethodHookParam p)throws Throwable{
+                        if(!p.hasThrowable())debugUi.adjustProtocolMap(p.thisObject,(Boolean)p.getObjectExtra(PREVIOUS+".protocol6"));
+                    }
+                });
+                menuGesture.run();
+                HookDiagnostics.hookMethod(r.method("debug.l"),new Hook(){
+                    @Override void before(MethodHookParam p)throws Throwable{if(p.thisObject.getClass()==r.type("z3.d"))p.setResult(debugUi.extraMenu());}
+                });
+                HookDiagnostics.hookMethod(r.method("ai.se"),new Hook(){@Override void before(MethodHookParam p)throws Throwable{layoutSe(r,p.thisObject,(Boolean)p.args[0]);p.setResult(null);}});
+                HookDiagnostics.hookMethod(r.method("ai.st"),new Hook(){@Override void before(MethodHookParam p)throws Throwable{layoutSt(r,p.thisObject,(Boolean)p.args[0],(Boolean)p.args[1]);p.setResult(null);}});
+                HookDiagnostics.hookMethod(r.method("ai.ks"),new Hook(){
+                    @Override void before(MethodHookParam p)throws Throwable{
+                        Object owner=aiLayout.get();
+                        if(owner!=null&&r.integer("fragment.mode",owner)==168&&r.debug())p.setResult(true);
+                    }
+                });
+                HookDiagnostics.hookMethod(r.method("ai.view"),new Hook(){
+                    @Override void before(MethodHookParam p)throws Throwable{
+                        p.setObjectExtra(PREVIOUS,aiView.get());
+                        p.setObjectExtra(PREVIOUS+".layout",aiLayout.get());
+                        // The original normal-layout commit is after Ns/Bt and the
+                        // W/R early return. A nested excluded owner must mask this frame.
+                        aiView.set(r.integer("fragment.mode",p.thisObject)==168
+                                &&!r.bool("screen.W",null)&&!r.bool("screen.R",null)
+                                ?new AiViewScope(p.thisObject):null);
+                        aiLayout.set(p.thisObject);
+                    }
+                    @Override void after(MethodHookParam p){
+                        AiViewScope scope=aiView.get();
+                        if(!p.hasThrowable()&&scope!=null&&scope.consumed)
+                            XposedHelpers.setAdditionalInstanceField(p.thisObject,APPLIED_AI_DEBUG,scope.debug);
+                        restore(aiView,(AiViewScope)p.getObjectExtra(PREVIOUS));
+                        restore(aiLayout,p.getObjectExtra(PREVIOUS+".layout"));
+                    }
+                });
+                HookDiagnostics.hookMethod(r.method("ai.resume"),new Hook(){
+                    @Override void after(MethodHookParam p)throws Throwable{
+                        if(p.hasThrowable()||r.integer("fragment.mode",p.thisObject)!=168)return;
+                        Boolean applied=(Boolean)XposedHelpers.getAdditionalInstanceField(p.thisObject,APPLIED_AI_DEBUG);
+                        if(applied==null||applied==r.debug())return;
+                        View view=(View)r.call("fragment.view",p.thisObject);
+                        if(view!=null)r.call("fragment.layout",p.thisObject,view,r.call("fragment.args",p.thisObject));
+                    }
+                });
+                HookDiagnostics.hookMethod(r.method("ai.panel"),new Hook(){
+                    @Override void before(MethodHookParam p){p.setObjectExtra(PREVIOUS,aiLayout.get());aiLayout.set(p.args[0]);}
+                    @Override void after(MethodHookParam p){restore(aiLayout,p.getObjectExtra(PREVIOUS));}
+                });
+                HookDiagnostics.hookMethod(r.method("view.layout"),new Hook(){
+                    @Override void before(MethodHookParam p)throws Throwable{
+                        AiViewScope scope=aiView.get();
+                        if(scope==null||scope.consumed||r.get("ai.g",scope.owner)!=p.thisObject
+                                ||!(p.args[0] instanceof FrameLayout.LayoutParams))return;
+                        // Ns/Bt do not write g. Consume its first normal-layout
+                        // commit only; the later Ts->st setter retains its own margin.
+                        // Framework bridge class names are not part of this contract.
+                        scope.consumed=true;
+                        Object owner=scope.owner;
+                        FrameLayout.LayoutParams layout=(FrameLayout.LayoutParams)p.args[0];
+                        int z=(Integer)r.call("screen.z",null);boolean enabled=scope.debug=r.debug();
+                        if(r.bool("ai.ks",null))layout.topMargin=enabled?(int)(z*2.7f):
+                                ((Resources)r.call("fragment.resources",owner)).getDimensionPixelSize(0x7f070079)
+                                        +((Rect)r.call("orientation.rect",null)).bottom;
+                        else layout.bottomMargin=enabled?(int)(z*2.7f):z;
+                    }
+                });
+            }
+        };
+    }
+
     private static boolean naturalMode(int mode){return mode==163||mode==167||mode==168||mode==173||mode==225||mode==229;}
     private static String naturalTitle(StyleRuntime r,Object component,int mode)throws Throwable{
         if(!naturalMode(mode)||!r.type("r2.m").isInstance(component)||r.integer("mode",component)!=mode)return null;
@@ -316,7 +389,7 @@ public final class StyleHooks {
         Object preference=r.construct("preference",r.call("fragment.activity",fragment));
         r.set("pref.order",preference,-200);
         r.call("pref.key",preference,key);r.call("pref.title",preference,"AI帮拍调试界面");
-        r.call("pref.summary",preference,"显示顶部菜单和手动参数栏，返回相机后生效");
+        r.call("pref.summary",preference,"显示手动参数栏，返回相机后生效");
         boolean enabled=r.debug();r.set("pref.t",preference,false);r.set("pref.K",preference,enabled);
         r.call("pref.checked",preference,enabled);r.set("pref.e",preference,fragment);r.call("pref.add",group,preference);
         Object keep=r.construct("preference",r.call("fragment.activity",fragment));

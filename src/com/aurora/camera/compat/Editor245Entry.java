@@ -6,6 +6,7 @@ import android.util.Log;
 import com.aurora.camera.compat.editor.Editor245Policy;
 import com.aurora.camera.compat.editor.EditorFeatureDevices293;
 import com.aurora.camera.compat.editor.EditorLegendaryGallery;
+import com.aurora.camera.compat.editor.EditorLeicaFilters292;
 import com.aurora.camera.compat.editor.EditorNativeCloud291;
 import com.aurora.camera.compat.editor.abi250.EditorAbi250;
 import com.aurora.camera.diagnostics.HookDiagnostics;
@@ -37,8 +38,20 @@ public final class Editor245Entry {
             Log.e(TAG, "unsupported editor device=" + Build.DEVICE + "; no editor hooks installed");
             return;
         }
+        state = State.RESOLVING;
+        if (mainProcess) {
+            HookDiagnostics.resolving("EditorLegendaryGallery");
+            try {
+                boolean supported = EditorLegendaryGallery.supportedRegion();
+                HookDiagnostics.resolved();
+                if (supported) HookDiagnostics.tryInstall("EditorLegendaryGallery", () -> EditorLegendaryGallery.install(lp.classLoader));
+                else HookDiagnostics.skipped("EditorLegendaryGallery");
+            } catch (ReflectiveOperationException | RuntimeException | LinkageError failure) {
+                HookDiagnostics.resolutionFailed(failure);
+            }
+        } else HookDiagnostics.skipped("EditorLegendaryGallery");
         try {
-            state = State.RESOLVING;
+            HookDiagnostics.resolving("EditorAbi250");
             if (lp.appInfo == null || lp.appInfo.sourceDir == null) {
                 throw new IllegalStateException("editor source APK path is missing");
             }
@@ -47,37 +60,23 @@ public final class Editor245Entry {
             }
             // Keep the original inode readable by delayed editor asset lookups after an APK update.
             moduleArchive = ParcelFileDescriptor.open(new File(moduleApkPath), ParcelFileDescriptor.MODE_READ_ONLY);
-            long started=android.os.SystemClock.elapsedRealtime();
-            HookDiagnostics.resolving("EditorAbi250");
             EditorAbi250 symbols = EditorAbi250.resolveCached(lp.appInfo.sourceDir, moduleApkPath,
                     new File(lp.appInfo.dataDir,"code_cache"),lp.classLoader);
             if(symbols.cacheIssue!=null)Log.e(TAG,symbols.cacheIssue);
-            if (symbols.usesNativeCloudFilter()) EditorNativeCloud291.loadBridge(moduleApkPath);
             HookDiagnostics.resolved();
             HookDiagnostics.completed("EditorAbi250");
             Host editor = new Host(lp.classLoader, "/proc/self/fd/" + moduleArchive.getFd(), symbols);
-            HookDiagnostics.resolving("EditorFeatureDevices293");
-            EditorFeatureDevices293 features = symbols.usesNativeCloudFilter() ? new EditorFeatureDevices293(editor) : null;
-            HookDiagnostics.resolving("Editor245Hooks");
-            Editor245Hooks hooks = new Editor245Hooks(editor);
-            HookDiagnostics.resolving("EditorMore246Hooks");
-            EditorMore246Hooks more = new EditorMore246Hooks(editor);
-            HookDiagnostics.resolved();
             state = State.INSTALLING;
-            if (symbols.usesNativeCloudFilter() && mainProcess) {
-                HookDiagnostics.install("EditorLegendaryGallery", () -> EditorLegendaryGallery.install(lp.classLoader));
-            } else HookDiagnostics.skipped("EditorLegendaryGallery");
-            if (features != null) HookDiagnostics.install("EditorFeatureDevices293", features::install);
-            else HookDiagnostics.skipped("EditorFeatureDevices293");
-            HookDiagnostics.install("Editor245Hooks", hooks::install);
-            HookDiagnostics.install("EditorMore246Hooks", more::install);
+            if (symbols.usesNativeCloudFilter()) EditorFeatureDevices293.install(editor);
+            HookDiagnostics.tryInstall("Editor245Hooks", () -> {
+                Editor245Hooks watermarks = new Editor245Hooks(editor);
+                if (symbols.usesNativeCloudFilter()) EditorNativeCloud291.loadBridge(moduleApkPath);
+                watermarks.install();
+            });
+            HookDiagnostics.tryInstall("EditorLeicaFilters292", () -> new EditorLeicaFilters292(editor).install());
+            HookDiagnostics.tryInstall("EditorMore246Hooks", () -> new EditorMore246Hooks(editor).install());
             state = State.INSTALLED;
-            Log.i(TAG, "editor watermark hooks installed; process=" + lp.processName
-                    + "; contract=dynamic250; cache="+(symbols.cacheHit?"hit":"miss")
-                    + "; initialize_ms="+(android.os.SystemClock.elapsedRealtime()-started)
-                    + "; native_cloud_filter="+symbols.usesNativeCloudFilter()
-                    + "; imported_lut_more_group=installed");
-        } catch (IOException | ReflectiveOperationException
+        } catch (IOException
                 | RuntimeException | LinkageError failure) {
             State previous = state;
             state = State.FAILED;
@@ -87,9 +86,7 @@ public final class Editor245Entry {
                 catch (IOException closeFailure) { failure.addSuppressed(closeFailure); }
                 moduleArchive = null;
             }
-            Log.e(TAG, "editor hooks failed at " + previous + "; "
-                    + (previous == State.INSTALLING ? "partial editor hooks may remain; " : "no editor hooks installed; ")
-                    + "no retry in this process", failure);
+            Log.e(TAG, "Editor asset/ABI preparation failed; see individual group results", failure);
         }
     }
 }

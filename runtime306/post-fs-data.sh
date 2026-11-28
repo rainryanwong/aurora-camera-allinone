@@ -9,7 +9,7 @@ root_log_context
 
 # Isolate M3 failures so the independent early activators still run.
 mount_m3() (
-root_require_applets mount cmp sha256sum cut readlink || fail "required mount tools unavailable"
+root_require_applets mount umount awk || fail "required mount tools unavailable"
 echo "m3_mount_begin_uptime=$(cat /proc/uptime)"
 AUX=/data/vendor/camera/offlinelog/phoenix_m3_aux
 mkdir -p "$AUX" || fail "create aux staging"
@@ -52,7 +52,6 @@ bind_entry() {
         # static assets so that the merged directory never exposes empty stubs.
         cp -p "$src" "$dst" || fail "copy static overlay $src"
         chcon "$(/system/bin/stat -c %C "$src")" "$dst" || fail "label $dst"
-        "$BB" cmp "$src" "$dst" || fail "verify static overlay $src"
     else
         : >"$dst" || fail "create mount point $dst"
         "$BB" mount -o bind "$src" "$dst" || fail "bind file $src"
@@ -91,9 +90,22 @@ chcon -R u:object_r:vendor_configs_file:s0 "$MODDIR/payload/odm/etc/camera" || f
 chcon -R u:object_r:vendor_file:s0 "$MODDIR/payload/odm/lib64" || fail "label libraries"
 merge_tree "$MODDIR/payload/odm/etc/camera/xiaomi" "$CAMERA_GRAPHS" "$MERGE/xiaomi" "$M3_GRAPHS"
 merge_tree "$MODDIR/payload/odm/lib64/camera/plugins" /odm/lib64/camera/plugins "$MERGE/plugins"
+config_id=
+plugin_id=
+rollback_m3() {
+    root_unmount_owned /odm/lib64/camera/plugins "$plugin_id" -l /odm/lib64/camera/plugins ||
+        echo 'ROLLBACK FAILED: M3 plugins'
+    root_unmount_owned "$CAMERA_GRAPHS" "$config_id" -l "$CAMERA_GRAPHS" ||
+        echo 'ROLLBACK FAILED: M3 graphs'
+}
+trap rollback_m3 EXIT
+trap 'exit 1' HUP INT TERM
 "$BB" mount -o rbind "$MERGE/xiaomi" /odm/etc/camera/xiaomi || fail "activate camera assets"
+config_id=$(root_mount_id "$CAMERA_GRAPHS")
 "$BB" mount -o rbind "$MERGE/plugins" /odm/lib64/camera/plugins || fail "activate plugins"
+plugin_id=$(root_mount_id /odm/lib64/camera/plugins)
 root_check_m3_visibility || fail "M3 mount verification failed"
+trap - EXIT HUP INT TERM
 echo "m3_mount_end_uptime=$(cat /proc/uptime)"
 echo "M3 ODM graphs, plugins and assets mounted"
 

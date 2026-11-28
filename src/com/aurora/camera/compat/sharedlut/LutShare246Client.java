@@ -5,6 +5,10 @@ import android.content.pm.*;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
+import android.system.ErrnoException;
+import android.system.Os;
+import android.system.OsConstants;
+import android.system.StructStat;
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
@@ -72,25 +76,73 @@ public final class LutShare246Client {
             throw new IOException("Cannot publish shared LUT catalog",failure);
         }
     }
-    public static File materialize(Context context,LutShare246.Row row) throws IOException {
-        if(row==null) throw new IOException("LUT row is missing");
-        // Revision-addressed files remain available after row removal/change, for native preview/save tasks already created.
-        File directory=new File(context.getFilesDir(),"lutshare246"); Files.createDirectories(directory.toPath());
-        File destination=new File(directory,row.revision+".png");
-        if(destination.isFile()) {
-            if(row.revision.equals(LutShare246.sha256(destination))) return destination;
-            throw new IOException("Cached editor LUT revision is corrupt");
-        }
-        Path temporary=Files.createTempFile(directory.toPath(),"lut-",".tmp");
-        try {
-            try(InputStream input=resolver(context).openInputStream(LutShare246.blobUri(row.revision)); FileOutputStream output=new FileOutputStream(temporary.toFile())) {
-                if(input==null) throw new IOException("LUT provider returned no download stream");
-                LutShare246Store.copyBounded(input,output,LutShare246.MAX_PNG_BYTES); output.getFD().sync();
-            } catch(RuntimeException failure) { throw new IOException("Cannot materialize shared LUT",failure); }
-            if(!row.revision.equals(LutShare246.sha256(temporary.toFile()))) throw new IOException("Downloaded LUT revision mismatch");
-            LutShare246Provider.validatePng(temporary.toFile());
-            Files.move(temporary,destination.toPath(),StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING);
+    /** Owned by the editor's single I/O worker. Reuse verification for unchanged private files. */
+    public static final class Materializer {
+        private final Map<String,StructStat> verified=new HashMap<>();
+
+        public File cached(Context context,LutShare246.Row row) throws IOException {
+            File destination=new File(directory(context),row.revision+".png");
+            StructStat current=stat(destination);
+            if(current==null) {
+                verified.remove(row.revision);
+                return null;
+            }
+            if(sameFile(verified.get(row.revision),current)) return destination;
+            if(!row.revision.equals(LutShare246.sha256(destination))
+                    || !sameFile(current,stat(destination))) {
+                verified.remove(row.revision);
+                throw new IOException("Cached editor LUT revision is corrupt or changed: "+row.id);
+            }
+            verified.put(row.revision,current);
             return destination;
-        } finally { Files.deleteIfExists(temporary); }
+        }
+
+        public File materialize(Context context,LutShare246.Row row) throws IOException {
+            File existing=cached(context,row);
+            if(existing!=null) return existing;
+            // Keep prior revisions on disk for native render/save operations that still use them.
+            File directory=directory(context);
+            Files.createDirectories(directory.toPath());
+            File destination=new File(directory,row.revision+".png");
+            Path temporary=Files.createTempFile(directory.toPath(),"lut-",".tmp");
+            try {
+                try(InputStream input=resolver(context).openInputStream(LutShare246.blobUri(row.revision)); FileOutputStream output=new FileOutputStream(temporary.toFile())) {
+                    if(input==null) throw new IOException("LUT provider returned no download stream");
+                    LutShare246Store.copyBounded(input,output,LutShare246.MAX_PNG_BYTES); output.getFD().sync();
+                } catch(RuntimeException failure) { throw new IOException("Cannot materialize shared LUT",failure); }
+                if(!row.revision.equals(LutShare246.sha256(temporary.toFile()))) throw new IOException("Downloaded LUT revision mismatch");
+                LutShare246Provider.validatePng(temporary.toFile());
+                Files.move(temporary,destination.toPath(),StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING);
+                StructStat published=stat(destination);
+                if(published==null) throw new IOException("Published editor LUT is missing: "+row.id);
+                verified.put(row.revision,published);
+                return destination;
+            } finally { Files.deleteIfExists(temporary); }
+        }
+
+        public void retain(List<LutShare246.Row> rows) {
+            Set<String> revisions=new HashSet<>();
+            for(LutShare246.Row row:rows) revisions.add(row.revision);
+            verified.keySet().retainAll(revisions);
+        }
+
+        private static File directory(Context context) { return new File(context.getFilesDir(),"lutshare246"); }
+
+        private static StructStat stat(File file) throws IOException {
+            try {
+                StructStat attributes=Os.stat(file.getPath());
+                if(!OsConstants.S_ISREG(attributes.st_mode)) throw new IOException("Editor LUT is not a regular file: "+file);
+                return attributes;
+            } catch(ErrnoException failure) {
+                if(failure.errno==OsConstants.ENOENT) return null;
+                throw new IOException("Cannot read editor LUT identity: "+file,failure);
+            }
+        }
+
+        private static boolean sameFile(StructStat first,StructStat current) {
+            return first!=null && current!=null
+                    && first.st_dev==current.st_dev && first.st_ino==current.st_ino && first.st_size==current.st_size
+                    && first.st_mtim.equals(current.st_mtim) && first.st_ctim.equals(current.st_ctim);
+        }
     }
 }

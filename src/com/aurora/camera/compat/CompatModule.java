@@ -92,11 +92,9 @@ public final class CompatModule implements IXposedHookLoadPackage, IXposedHookZy
                 installedGroups++;
                 Log.i(TAG, "group installed id=" + group);
             } catch (RuntimeException | LinkageError failure) {
-                state = State.FAILED;
                 Log.e(TAG, "group install failed id=" + group
                         + " completedGroups=" + installedGroups
-                        + "; partial hooks may remain; no retry in this process", failure);
-                return;
+                        + "; continuing with independent groups", failure);
             }
         }
         state = State.INSTALLED;

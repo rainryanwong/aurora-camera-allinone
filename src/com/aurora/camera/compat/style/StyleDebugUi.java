@@ -15,13 +15,9 @@ public final class StyleDebugUi {
         result.add(4);result.add(7);result.add(43);return result;
     }
 
-    public Object quickMenu(Object owner)throws Throwable {
-        return r.debug()?r.call("debug.a",owner):new ArrayList<Object>();
-    }
-
     public ArrayList<Object> extraMenu()throws Throwable {
         ArrayList<Object> result=new ArrayList<>();
-        if(r.debug())for(int id:new int[]{0xd40,0xdf,0xc2,0xd1})result.add(r.call("menu.item",null,id));
+        for(int id:new int[]{0xd40,0xdf,0xc2,0xd1})result.add(r.call("menu.item",null,id));
         return result;
     }
 

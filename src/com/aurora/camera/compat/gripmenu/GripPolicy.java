@@ -57,7 +57,7 @@ public final class GripPolicy {
         runtime.cancelNative(focus,true);
         runtime.log("half release: native AF state cleaned");return true;
     }
-    public static boolean stopMode(int mode){return mode==163||mode==168||mode==173||mode==225||mode==229;}
+    public static boolean stopMode(int mode){return mode==163||mode==168||mode==173||mode==225||mode==229||mode==256;}
     public interface StopRange { boolean contains(float value); }
     public static void addStops(ArrayList<Float> values,int mode,boolean front,StopRange range){
         if(!stopMode(mode)||front||values==null||!values.contains(1f))return;

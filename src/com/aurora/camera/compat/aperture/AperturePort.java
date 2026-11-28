@@ -27,7 +27,9 @@ public final class AperturePort {
     private final Class<?> aperture, professional, panel, manualAdapter, workspaceType, firstExposure, secondExposure;
     private final Method running, runningMode, runningRear, repository, getComponent;
     private final Field runningIndex, componentMode, supported, satSupported;
-    private final Method componentValue, componentDefault, componentSet, componentItems;
+    private final Method componentValue, componentDefault, componentSet, componentItems, expandMenu;
+    private final Field itemValue;
+    private final ThreadLocal<Object> menuAperture = new ThreadLocal<>();
     private final Method apertureApply, apertureValid, apertureAuto, apertureDisplay;
     private final Method protocol, protocolMode, protocolAperture, exclusionProtocol;
     private final Method enableClick, currentPreview;
@@ -92,6 +94,8 @@ public final class AperturePort {
         componentDefault=h.method(component,"getDefaultValue",int.class);
         componentSet=h.method(component,"setComponentValue",int.class,String.class);
         componentItems=h.method(aperture,"getItems"); apertureApply=h.method(aperture,"i",int.class,String.class);
+        expandMenu=h.method("p5.W","us",component,h.type("b5.i"),int.class,int.class);
+        itemValue=h.field("com.android.camera.data.data.d","r");
         apertureValid=h.method(aperture,"checkValueValid",int.class,String.class);
         apertureAuto=h.method(aperture,"b"); apertureDisplay=h.method(aperture,"c",int.class);
         autoValue=h.field("e2.a","b");
@@ -174,6 +178,27 @@ public final class AperturePort {
                 p.args[0]=ApertureRules.setupMode((Integer)p.args[0]);
             }
         };
+        HookDiagnostics.hookMethod(expandMenu,new StrictHook() {
+            @Override protected void before(MethodHookParam p) throws Throwable {
+                if ((Integer)p.args[2]==3392 && isAi(p.args[0],fragmentMode.getInt(p.thisObject)))
+                    menuAperture.set(p.args[0]);
+            }
+            @Override protected void after(MethodHookParam p) { menuAperture.remove(); }
+        });
+        // The grid copies these rows and measures the same list during us().
+        // The manual wheel and AI requests continue to read the full component.
+        HookDiagnostics.hookMethod(componentItems,new StrictHook() {
+            @Override protected void after(MethodHookParam p) throws Throwable {
+                if (p.hasThrowable() || p.thisObject!=menuAperture.get()) return;
+                ArrayList<Object> rows=new ArrayList<>();
+                for (Object row:(List<?>)p.getResult()) {
+                    String value=(String)itemValue.get(row);
+                    if ("-1.0".equals(value) || "1.63".equals(value) || "2.0".equals(value)
+                            || "2.8".equals(value) || "4.0".equals(value)) rows.add(row);
+                }
+                p.setResult(rows);
+            }
+        });
         HookDiagnostics.hookMethod(componentSetup,setupAlias);
         HookDiagnostics.hookMethod(componentSupport,setupAlias);
         HookDiagnostics.hookMethod(activeAperture,new StrictHook(){

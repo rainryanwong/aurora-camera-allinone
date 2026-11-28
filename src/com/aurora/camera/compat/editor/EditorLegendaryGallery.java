@@ -17,11 +17,13 @@ public final class EditorLegendaryGallery {
 
     private EditorLegendaryGallery() {}
 
-    public static void install(ClassLoader loader) throws ReflectiveOperationException {
+    public static boolean supportedRegion() throws ReflectiveOperationException {
         Method getProperty = Class.forName("android.os.SystemProperties")
                 .getMethod("get", String.class, String.class);
-        if (!"cn".equalsIgnoreCase((String) getProperty.invoke(null, "ro.miui.build.region", "cn"))) return;
+        return "cn".equalsIgnoreCase((String) getProperty.invoke(null, "ro.miui.build.region", "cn"));
+    }
 
+    public static void install(ClassLoader loader) throws ReflectiveOperationException {
         Method call = Class.forName(PROVIDER, false, loader)
                 .getDeclaredMethod("call", String.class, String.class, Bundle.class);
         HookDiagnostics.hookMethod(call, new StrictHook() {
@@ -36,7 +38,7 @@ public final class EditorLegendaryGallery {
                 if (param.getResult() instanceof Bundle
                         && "com.miui.gallery".equals(((ContentProvider) param.thisObject).getCallingPackage())) {
                     Bundle result = (Bundle) param.getResult();
-                    if (result.containsKey(key) && !result.getBoolean(key)) {
+                    if (Boolean.FALSE.equals(result.get(key))) {
                         result.putBoolean(key, true);
                         Log.i("AuroraEditor245", "Legendary available for Gallery: " + method);
                     }

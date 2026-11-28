@@ -34,7 +34,7 @@ public final class EditorAbi250 implements Host.Symbols {
     private static final String ASSET="assets/editor250/contract.tsv";
     private static final String NATIVE_ASSET="assets/editor291/contract.tsv";
     private static final String NATIVE_ALIASES="assets/editor291/aliases.tsv";
-    private static final int CACHE_FORMAT=0x41424931;
+    private static final int CACHE_FORMAT=0x41424932;
     public boolean cacheHit;
     public String cacheIssue;
     private final Map<String,String> types=new LinkedHashMap<>(),reverseTypes=new LinkedHashMap<>();
@@ -126,6 +126,16 @@ public final class EditorAbi250 implements Host.Symbols {
     }
     private static EditorAbi250 resolveCached(String targetApk,String moduleApk,File directory,boolean nativeCloud)throws IOException {
         EditorAbi250 result=new EditorAbi250();
+        String identity=fileIdentity(targetApk)+"\n"+fileIdentity(moduleApk)+"\n"+nativeCloud;
+        File cache=new File(directory,"aurora-editor-abi251.bin");
+        if(cache.isFile()) {
+            try {
+                if(result.readCache(cache,identity)){result.cacheHit=true;return result;}
+            } catch(IOException failure) {
+                result=new EditorAbi250();
+                result.cacheIssue="cache read: "+failure.getMessage();
+            }
+        }
         try(ZipFile zip=new ZipFile(moduleApk)) {
             ZipEntry entry=zip.getEntry(nativeCloud?NATIVE_ASSET:ASSET);
             if(entry==null)throw new IOException("Editor250 symbol contract is missing from module");
@@ -136,17 +146,11 @@ public final class EditorAbi250 implements Host.Symbols {
                 try(InputStream in=zip.getInputStream(aliases)){result.readAliases(in);}
             }
         }
-        String identity=fileIdentity(targetApk)+"\n"+fileIdentity(moduleApk);
-        File cache=new File(directory,"aurora-editor-abi251.bin");
-        if(cache.isFile()) {
-            try {
-                if(result.readCache(cache,identity)){result.cacheHit=true;return result;}
-            } catch(IOException failure) {
-                result.cacheIssue="cache read: "+failure.getMessage();
-                result.clearResolved();
-            }
-        }
         result.resolveTarget(targetApk);
+        // Runtime lookups only use resolved declarations represented in the contract.
+        result.methods.keySet().retainAll(result.profile.methods.keySet());
+        result.fields.keySet().retainAll(result.profile.fields.keySet());
+        result.profile=null;
         try {result.writeCache(cache,identity);}
         catch(IOException failure){result.cacheIssue="cache write: "+failure.getMessage();}
         return result;
@@ -161,6 +165,15 @@ public final class EditorAbi250 implements Host.Symbols {
         try(DataInputStream in=new DataInputStream(new BufferedInputStream(new FileInputStream(file)))) {
             if(in.readInt()!=CACHE_FORMAT||!in.readUTF().equals(identity))return false;
             readMap(in,types);readMap(in,methods);readMap(in,fields);
+            readMap(in,typeAliases);readMap(in,fieldAliases);
+            int aliases=readCount(in);
+            for(int i=0;i<aliases;i++) {
+                String key=in.readUTF();
+                Set<String> ids=new LinkedHashSet<>();
+                int size=readCount(in);
+                for(int j=0;j<size;j++)ids.add(in.readUTF());
+                methodAliases.put(key,ids);
+            }
             int count=readCount(in);
             for(int i=0;i<count;i++) {
                 String key=in.readUTF();int[] values=new int[readCount(in)];
@@ -188,6 +201,12 @@ public final class EditorAbi250 implements Host.Symbols {
             try(FileOutputStream stream=new FileOutputStream(temporary.toFile());DataOutputStream out=new DataOutputStream(new BufferedOutputStream(stream))) {
                 out.writeInt(CACHE_FORMAT);out.writeUTF(identity);
                 writeMap(out,types);writeMap(out,methods);writeMap(out,fields);
+                writeMap(out,typeAliases);writeMap(out,fieldAliases);
+                out.writeInt(methodAliases.size());
+                for(Map.Entry<String,Set<String>> alias:methodAliases.entrySet()) {
+                    out.writeUTF(alias.getKey());out.writeInt(alias.getValue().size());
+                    for(String id:alias.getValue())out.writeUTF(id);
+                }
                 out.writeInt(resources.size());
                 for(Map.Entry<String,int[]> e:resources.entrySet()) {
                     out.writeUTF(e.getKey());out.writeInt(e.getValue().length);
@@ -198,10 +217,6 @@ public final class EditorAbi250 implements Host.Symbols {
             Files.move(temporary,file.toPath(),StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING);
         } finally {Files.deleteIfExists(temporary);}
     }
-    private void clearResolved() {
-        types.clear();reverseTypes.clear();methods.clear();fields.clear();resources.clear();
-    }
-
     private void resolveTarget(String targetApk)throws IOException {
         index=Dex250.readApk(targetApk);
         solve();
@@ -233,8 +248,13 @@ public final class EditorAbi250 implements Host.Symbols {
         if(oldOwner==null&&stable(actualOwner))oldOwner=actualOwner;
         Set<String> matches=new LinkedHashSet<>();
         Set<String> aliases=methodAliases.get(oldOwner+"->"+oldName);
-        for(PMethod pm:profile.methods.values())if(pm.owner.equals(oldOwner)&&(aliases==null?pm.name.equals(oldName):aliases.contains(pm.id()))) {
-            String id=methods.get(pm.id());if(id==null)continue;
+        String ownerPrefix=oldOwner+"->";
+        String methodPrefix=ownerPrefix+oldName+"(";
+        for(Map.Entry<String,String> method:methods.entrySet()) {
+            String old=method.getKey();
+            if(profile!=null&&!profile.methods.containsKey(old))continue;
+            if(aliases==null?!old.startsWith(methodPrefix):!(old.startsWith(ownerPrefix)&&aliases.contains(old)))continue;
+            String id=method.getValue();
             int arrow=id.indexOf("->"),paren=id.indexOf('(',arrow),end=id.indexOf(')',paren)+1;
             String prototype=id.substring(paren);
             if((actualPrototype.endsWith(")")?prototype.substring(0,end-paren):prototype).equals(actualPrototype))
@@ -248,8 +268,12 @@ public final class EditorAbi250 implements Host.Symbols {
         if(oldOwner==null&&stable(actualOwner))oldOwner=actualOwner;
         oldName=fieldAliases.getOrDefault(oldOwner+"->"+oldName,oldName);
         Set<String> matches=new LinkedHashSet<>();
-        for(PField pf:profile.fields.values())if(pf.owner.equals(oldOwner)&&pf.name.equals(oldName)) {
-            String id=fields.get(pf.id());if(id!=null)matches.add(id.substring(id.indexOf("->")+2,id.lastIndexOf(':')));
+        String prefix=oldOwner+"->"+oldName+":";
+        for(Map.Entry<String,String> field:fields.entrySet()) {
+            String old=field.getKey();
+            if(!old.startsWith(prefix)||(profile!=null&&!profile.fields.containsKey(old)))continue;
+            String id=field.getValue();
+            matches.add(id.substring(id.indexOf("->")+2,id.lastIndexOf(':')));
         }
         if(matches.size()!=1)throw new NoSuchFieldException("Editor250 unresolved/ambiguous field "+actualOwnerBinary+"#"+oldName+" matches="+matches);
         return matches.iterator().next();
@@ -521,9 +545,11 @@ public final class EditorAbi250 implements Host.Symbols {
             for(Map.Entry<String,String> e:types.entrySet())out.println("C\t"+e.getKey()+"\t"+e.getValue()+"\t"+reasons.get("C:"+e.getKey()));
             for(Map.Entry<String,String> e:methods.entrySet())out.println("M\t"+e.getKey()+"\t"+e.getValue()+"\t"+reasons.get("M:"+e.getKey()));
             for(Map.Entry<String,String> e:fields.entrySet())out.println("F\t"+e.getKey()+"\t"+e.getValue()+"\t"+reasons.get("F:"+e.getKey()));
-            for(PClass c:profile.classes.values())if(!types.containsKey(c.name))out.println("UNRESOLVED_C\t"+c.name);
-            for(PMethod m:profile.methods.values())if(!methods.containsKey(m.id()))out.println("UNRESOLVED_M\t"+m.id());
-            for(PField f:profile.fields.values())if(!fields.containsKey(f.id()))out.println("UNRESOLVED_F\t"+f.id());
+            if(profile!=null) {
+                for(PClass c:profile.classes.values())if(!types.containsKey(c.name))out.println("UNRESOLVED_C\t"+c.name);
+                for(PMethod m:profile.methods.values())if(!methods.containsKey(m.id()))out.println("UNRESOLVED_M\t"+m.id());
+                for(PField f:profile.fields.values())if(!fields.containsKey(f.id()))out.println("UNRESOLVED_F\t"+f.id());
+            }
         }
     }
     public static void main(String[] args)throws Exception {

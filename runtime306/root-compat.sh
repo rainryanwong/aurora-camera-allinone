@@ -133,20 +133,49 @@ elf_body_sha() (
     } | /system/bin/sha256sum | /system/bin/cut -d ' ' -f 1
 )
 
+root_same_file() {
+    local source_id target_id
+    source_id=$(/system/bin/stat -Lc '%d:%i' "$1") || return 1
+    target_id=$(/system/bin/stat -Lc '%d:%i' "$2") || return 1
+    [ "$source_id" = "$target_id" ]
+}
+
+root_path_mount_id() (
+    exec 3<"$1" || exit 1
+    while read -r field value rest; do
+        if [ "$field" = mnt_id: ]; then
+            printf '%s\n' "$value"
+            exit 0
+        fi
+    done < /proc/self/fdinfo/3
+    exit 1
+)
+
+root_mount_id() {
+    local id
+    id=$(root_path_mount_id "$1") || return 1
+    "$BB" awk -v id="$id" -v t="$1" '$1==id && $5==t {print $1}' /proc/self/mountinfo
+}
+
+root_unmount_owned() {
+    [ -n "$2" ] && [ "$(root_mount_id "$1")" = "$2" ] || return 0
+    shift 2
+    "$BB" umount "$@"
+}
+
 root_check_m3_tree() {
-    local src dst expected actual failed=0
+    local src staged dst failed=0
     [ -d "$1" ] || { echo "ERROR: M3 payload directory missing: $1"; return 1; }
     # Recursion stays in this shell so a nested mismatch is not lost in a
     # pipeline subshell. Quoted glob entries also preserve filenames verbatim.
     for src in "$1"/*; do
-        dst="$2/${src##*/}"
+        staged="$2/${src##*/}"
+        dst="$3/${src##*/}"
         if [ -d "$src" ]; then
-            root_check_m3_tree "$src" "$dst" || failed=1
+            root_check_m3_tree "$src" "$staged" "$dst" || failed=1
         elif [ -f "$src" ]; then
-            expected=$("$BB" sha256sum "$src" | "$BB" cut -d ' ' -f 1)
-            actual=$("$BB" sha256sum "$dst" 2>/dev/null | "$BB" cut -d ' ' -f 1)
-            if [ -z "$expected" ] || [ "$actual" != "$expected" ]; then
-                echo "ERROR: M3 visibility mismatch: $dst; expected=$expected; actual=${actual:-unreadable}"
+            if ! root_same_file "$staged" "$dst"; then
+                echo "ERROR: M3 mounted identity mismatch: $dst"
                 failed=1
             fi
         fi
@@ -155,15 +184,15 @@ root_check_m3_tree() {
 }
 
 root_check_m3_visibility() {
-    # A successful mount syscall alone cannot prove camera-visible resources.
-    root_check_m3_tree "$MODDIR/payload/odm/etc/camera/xiaomi" /odm/etc/camera/xiaomi || return 1
+    local prefix=${1:-} merge=/dev/phoenix_m3
+    root_check_m3_tree "$MODDIR/payload/odm/etc/camera/xiaomi" "$merge/xiaomi" "$prefix/odm/etc/camera/xiaomi" || return 1
     local graph
     for graph in leicasnapshot.json normalsnapshot.json satsnapshot.json; do
-        "$BB" cmp -s "/dev/phoenix_m3/graphs/$graph" "/odm/etc/camera/xiaomi/$graph" || {
+        root_same_file "$merge/graphs/$graph" "$prefix/odm/etc/camera/xiaomi/$graph" || {
             echo "ERROR: M3 generated graph not visible: $graph"
             return 1
         }
     done
-    root_check_m3_tree "$MODDIR/payload/odm/lib64/camera/plugins" /odm/lib64/camera/plugins || return 1
-    echo 'M3 payload visible and hash-matched in this script context; camera/provider validation still required'
+    root_check_m3_tree "$MODDIR/payload/odm/lib64/camera/plugins" "$merge/plugins" "$prefix/odm/lib64/camera/plugins" || return 1
+    echo 'M3 staged payload identities match mounted files'
 }

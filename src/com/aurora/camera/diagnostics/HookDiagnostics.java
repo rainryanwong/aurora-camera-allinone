@@ -28,6 +28,7 @@ public final class HookDiagnostics {
     private static final String TAG = "AuroraHookDiagnostics";
     private static final ThreadLocal<String> installing = new ThreadLocal<>();
     private static final ThreadLocal<Boolean> missingRegistration = new ThreadLocal<>();
+    private static final ThreadLocal<List<XC_MethodHook.Unhook>> registrations = new ThreadLocal<>();
     private static volatile Journal journal;
 
     private HookDiagnostics() {}
@@ -69,18 +70,43 @@ public final class HookDiagnostics {
     }
 
     public static <E extends Throwable> void install(String group, Installer<E> action) throws E {
+        String outerGroup = installing.get();
+        Boolean outerMissing = missingRegistration.get();
+        List<XC_MethodHook.Unhook> outerHandles = registrations.get();
+        List<XC_MethodHook.Unhook> handles = new ArrayList<>();
         installing.set(group);
         missingRegistration.remove();
+        registrations.set(handles);
         event("group", group, "installing");
         try {
             action.run();
-            event("group", group, "registered");
-        } catch (Throwable failure) {
-            failure("install-error", group, failure);
-            throw failure;
+            // A single missing hook already has its own diagnostic. Preserve the
+            // other independent hooks in older groups which allow partial support.
+            if (allHooksRegistered()) event("group", group, "registered");
+        } catch (Throwable error) {
+            for (int i = handles.size() - 1; i >= 0; i--) {
+                try { unhook(handles.get(i)); }
+                catch (RuntimeException | LinkageError cleanup) { error.addSuppressed(cleanup); }
+            }
+            failure("install-error", group, error);
+            throw error;
         } finally {
-            installing.remove();
-            missingRegistration.remove();
+            if (outerGroup == null) installing.remove(); else installing.set(outerGroup);
+            if (outerMissing == null) missingRegistration.remove(); else missingRegistration.set(outerMissing);
+            if (outerHandles == null) registrations.remove(); else registrations.set(outerHandles);
+        }
+    }
+
+    /** Install an independent feature. install() records its exact failure and removes its hooks. */
+    public static boolean tryInstall(String group, Installer<ReflectiveOperationException> action) {
+        try {
+            install(group, () -> {
+                action.run();
+                if (!allHooksRegistered()) throw new IllegalStateException("Incomplete registration: " + group);
+            });
+            return true;
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
+            return false;
         }
     }
 
@@ -123,6 +149,7 @@ public final class HookDiagnostics {
         if (current == null) {
             XC_MethodHook.Unhook handle = XposedBridge.hookMethod(method, callback);
             if (handle == null && installing.get() != null) missingRegistration.set(true);
+            remember(handle);
             return handle;
         }
         String owner = owner(callback.getClass());
@@ -135,6 +162,7 @@ public final class HookDiagnostics {
                 if (group != null) missingRegistration.set(true);
                 point.error("register-error", new IllegalStateException("LSPosed returned no registration"));
             } else {
+                remember(handle);
                 point.write("registered", "");
             }
             return handle;
@@ -144,8 +172,15 @@ public final class HookDiagnostics {
         }
     }
 
+    private static void remember(XC_MethodHook.Unhook handle) {
+        List<XC_MethodHook.Unhook> handles = registrations.get();
+        if (handles != null && handle != null) handles.add(handle);
+    }
+
     public static void unhook(XC_MethodHook.Unhook handle) {
         handle.unhook();
+        List<XC_MethodHook.Unhook> handles = registrations.get();
+        if (handles != null) handles.remove(handle);
         ObservedHook callback = (ObservedHook) handle.getCallback();
         Point point = callback.point(handle.getHookedMethod());
         if (point != null) point.write("removed", "");

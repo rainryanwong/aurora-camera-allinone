@@ -55,6 +55,10 @@ final class DirectorCapture {
         Method ultraRatio = host.method("Kr.i", "j");
         Method teleRatio = host.method("Kr.i", "h");
         Method standaloneRatio = host.method("Kr.i", "i");
+        Class<?> directorZoom = host.type("j9.e");
+        Method initialZoom = host.method("j9.K", "b2", int.class);
+        Field zoomModule = host.field("i9.e", "b");
+        Method actualId = host.method("com.android.camera.module.u", "getActualCameraId");
         Method zoomRatios = host.method("com.android.camera.data.data.i", "S", int.class);
         Method zoomClick = host.method("H4.p0", "Ds", int.class, int.class);
         Method canClick = host.method("H4.p0", "I0");
@@ -107,6 +111,23 @@ final class DirectorCapture {
 
                 @Override protected boolean countsAsRun(MethodHookParam param) {
                     return Boolean.TRUE.equals(param.getObjectExtra(EXTENDED));
+                }
+            });
+            HookDiagnostics.hookMethod(initialZoom, new StrictHook() {
+                @Override protected void after(MethodHookParam param) throws ReflectiveOperationException {
+                    if (param.hasThrowable() || !directorZoom.isInstance(param.thisObject)) return;
+                    Object module = ((java.lang.ref.WeakReference<?>) zoomModule.get(param.thisObject)).get();
+                    if (module == null) return;
+                    Object registry = cameras.invoke(null);
+                    int id = (int) actualId.invoke(module);
+                    float selected = (float) param.getResult();
+                    // The native device conversion handles physical zoom. Initialize the
+                    // displayed ratio from the opened lens if a generic 1x was restored.
+                    if (id >= 0 && sameRatio(selected, 1f)) {
+                        if (id == (int) cameraIds[3].invoke(registry)) param.setResult(standaloneRatio.invoke(null));
+                        else if (id == (int) cameraIds[2].invoke(registry)) param.setResult(teleRatio.invoke(null));
+                        else if (id == (int) cameraIds[0].invoke(registry)) param.setResult(ultraRatio.invoke(null));
+                    }
                 }
             });
             HookDiagnostics.hookMethod(zoomRatios, new StrictHook() {

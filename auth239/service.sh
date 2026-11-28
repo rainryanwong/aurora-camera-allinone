@@ -6,15 +6,12 @@ grep -q '^com.aurora.camera.compat ' /data/system/packages.list || exit 0
 [ ! -e "$MODDIR/mount_failed" ] || { echo 'AUTH mount failed; formula service not started'; exit 1; }
 . "$MODDIR/../root-compat.sh"
 root_init
-while [ ! -d /data/user/0/com.android.camera/files ]; do
-    [ ! -e "$MODDIR/../disable" ] && [ ! -e "$MODDIR/../remove" ] || exit 0
-    sleep 2
-done
 sh "$MODDIR/init-formula.sh"
-"$BB" cmp "$MODDIR/payload/libMiPhotoFilter.so" /odm/lib64/libMiPhotoFilter.so
+root_same_file "$MODDIR/payload/libMiPhotoFilter.so" /odm/lib64/libMiPhotoFilter.so
 # The normal filter factory uses the donor Candy backend through AuroraBridge.
 # The old stock-library mount alone cannot establish the active AUTH pair.
-"$BB" cmp "$MODDIR/../system/vendor/lib64/libAuroraCandy.so" /vendor/lib64/libAuroraCandy.so
+root_same_file "$MODDIR/../system/vendor/lib64/libAuroraCandy.so" /vendor/lib64/libAuroraCandy.so ||
+    "$BB" cmp -s "$MODDIR/../system/vendor/lib64/libAuroraCandy.so" /vendor/lib64/libAuroraCandy.so
 APP=/data/user/0/com.android.camera/files/phoenix-vignette
 VENDOR=/data/vendor/camera/phoenix-vignette
 export PHOENIX_APP_OWNER="$(/system/bin/stat -c %u:%g "${APP%/*}")"
